@@ -3,9 +3,18 @@ import pandas as pd
 import datetime
 import hashlib
 import sqlite3
+import urllib.parse
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session
 import io
+
+# --- GERADOR DE GRÁFICOS (Plotly) ---
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    PLOTLY_DISPONIVEL = True
+except ImportError:
+    PLOTLY_DISPONIVEL = False
 
 # --- GERADOR DE PDF (ReportLab) ---
 try:
@@ -27,22 +36,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS PROFUNDO: Força a sobrescrita absoluta de todos os Web Components do Streamlit
 st.markdown("""
     <style>
-    /* 1. FUNDO GLOBAL E REINICIALIZAÇÃO */
+    /* FUNDO GLOBAL */
     html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], .stApp {
         background-color: #080A0F !important;
         color: #E2E8F0 !important;
         font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     }
     
-    /* Hide top bar decoration */
     [data-testid="stHeader"] {
         background-color: rgba(8, 10, 15, 0.95) !important;
     }
 
-    /* 2. SIDEBAR METÁLICA COCKPIT */
+    /* SIDEBAR METÁLICA COCKPIT */
     [data-testid="stSidebar"], [data-testid="stSidebarContent"] {
         background-color: #11141C !important;
         border-right: 1px solid #1E2433 !important;
@@ -51,7 +58,7 @@ st.markdown("""
         color: #CBD5E1 !important;
     }
 
-    /* 3. INPUTS, TEXTAREAS E NUMBER INPUTS (GRAFITE ESCURO E LETRA BRANCA) */
+    /* INPUTS E TEXTAREAS */
     div[data-baseweb="input"],
     div[data-baseweb="base-input"],
     div[data-baseweb="textarea"],
@@ -63,14 +70,13 @@ st.markdown("""
         border-radius: 6px !important;
     }
 
-    /* Foco dos campos em Vermelho Neon */
     div[data-baseweb="input"]:focus-within,
     div[data-baseweb="textarea"]:focus-within {
         border-color: #FF3B30 !important;
         box-shadow: 0 0 8px rgba(255, 59, 48, 0.4) !important;
     }
 
-    /* 4. DROPDOWNS / SELECTBOX (SOLUÇÃO DE CONTRASTE TOTAL) */
+    /* DROPDOWNS / SELECTBOX */
     div[data-baseweb="select"] > div,
     div[data-baseweb="select"] span,
     div[data-baseweb="select"] div {
@@ -78,7 +84,6 @@ st.markdown("""
         color: #FFFFFF !important;
         border-color: #2B3448 !important;
     }
-    /* Menu Pop-up do Selectbox */
     ul[role="listbox"], li[role="option"] {
         background-color: #171C26 !important;
         color: #FFFFFF !important;
@@ -88,7 +93,7 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* 5. FORMULÁRIOS & LABELS */
+    /* FORMULÁRIOS & LABELS */
     [data-testid="stForm"] {
         background-color: #11141C !important;
         border: 1px solid #1E2433 !important;
@@ -104,7 +109,7 @@ st.markdown("""
         letter-spacing: 0.5px !important;
     }
 
-    /* 6. BOTÕES HIGH-PERFORMANCE RACING */
+    /* BOTÕES HIGH-PERFORMANCE RACING */
     div.stButton > button, div[data-testid="stFormSubmitButton"] > button {
         background: linear-gradient(135deg, #E62E2D 0%, #A31212 100%) !important;
         color: #FFFFFF !important;
@@ -113,7 +118,7 @@ st.markdown("""
         letter-spacing: 1px !important;
         border: none !important;
         border-radius: 6px !important;
-        padding: 12px 24px !important;
+        padding: 10px 20px !important;
         box-shadow: 0 4px 15px rgba(230, 46, 45, 0.4) !important;
         transition: all 0.2s ease !important;
     }
@@ -126,7 +131,7 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* 7. EXPANDERS & CARDS DE O.S. */
+    /* EXPANDERS & METRICAS */
     [data-testid="stExpander"] {
         background-color: #11141C !important;
         border: 1px solid #1E2433 !important;
@@ -137,14 +142,12 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* 8. TABELAS DE DADOS (DATAFRAME) */
     [data-testid="stDataFrame"] {
         background-color: #11141C !important;
         border: 1px solid #1E2433 !important;
         border-radius: 8px !important;
     }
 
-    /* 9. CARDS DE MÉTRICAS / TELEMETRIA */
     [data-testid="stMetric"] {
         background-color: #11141C !important;
         border: 1px solid #1E2433 !important;
@@ -157,7 +160,7 @@ st.markdown("""
         font-weight: 900 !important;
     }
 
-    /* 10. ESTILIZAÇÃO CUSTOMIZADA DE TÍTULOS */
+    /* TITULOS CUSTOMIZADOS */
     .header-title {
         color: #FF3B30 !important;
         font-weight: 900;
@@ -171,6 +174,22 @@ st.markdown("""
         font-weight: 700;
         font-size: 1.1rem;
         margin-bottom: 15px;
+    }
+    
+    /* LINK BOTÃO WHATSAPP */
+    .btn-whatsapp {
+        display: inline-block;
+        background-color: #25D366;
+        color: white !important;
+        font-weight: bold;
+        padding: 8px 16px;
+        border-radius: 6px;
+        text-decoration: none;
+        text-align: center;
+        box-shadow: 0 4px 10px rgba(37, 211, 102, 0.3);
+    }
+    .btn-whatsapp:hover {
+        background-color: #1EBE5D;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -216,6 +235,7 @@ class PecaModel(Base):
     codigo = Column(String(50), unique=True, index=True)
     quantidade = Column(Integer, default=0)
     estoque_minimo = Column(Integer, default=3)
+    preco_custo = Column(Float, default=0.0)
     preco_venda = Column(Float, default=0.0)
 
 class OrdemServicoModel(Base):
@@ -229,6 +249,8 @@ class OrdemServicoModel(Base):
     mao_de_obra = Column(Float, default=0.0)
     pecas_valor = Column(Float, default=0.0)
     valor_total = Column(Float, default=0.0)
+    kit_utilizado = Column(String(100), default="Nenhum")
+    estoque_baixado = Column(Integer, default=0) # 0 = Não, 1 = Sim
     data_abertura = Column(DateTime, default=datetime.datetime.now)
     veiculo = relationship("VeiculoModel", back_populates="ordens_servico")
 
@@ -258,12 +280,13 @@ def inicializar_banco():
             senha_admin = hashlib.sha256("admin123".encode()).hexdigest()
             session.add(UsuarioModel(usuario="admin", senha_hash=senha_admin, perfil="Administrador"))
             session.add(UsuarioModel(usuario="mecanico1", senha_hash=senha_admin, perfil="Mecânico"))
+            session.add(UsuarioModel(usuario="recepcao", senha_hash=senha_admin, perfil="Atendimento"))
             session.commit()
     finally:
         session.close()
 
 # ==============================================================================
-# 3. CAMADA DE SERVIÇOS
+# 3. CAMADA DE SERVIÇOS & NEGÓCIO
 # ==============================================================================
 class AuditService:
     @staticmethod
@@ -322,7 +345,7 @@ class PDFService:
             dados_fin = [
                 ["Discriminação", "Valor (R$)"],
                 ["Mão de Obra Técnico", f"R$ {os_data.mao_de_obra:.2f}"],
-                ["Peças / Componentes", f"R$ {os_data.pecas_valor:.2f}"],
+                ["Peças / Kit (" + str(os_data.kit_utilizado) + ")", f"R$ {os_data.pecas_valor:.2f}"],
                 ["TOTAL GERAL", f"R$ {os_data.valor_total:.2f}"]
             ]
             t_fin = Table(dados_fin, colWidths=[380, 140])
@@ -339,6 +362,26 @@ class PDFService:
             return buffer.getvalue()
         finally:
             session.close()
+
+class WhatsAppService:
+    @staticmethod
+    def gerar_link_whatsapp(telefone: str, os_id: int, cliente: str, modelo: str, placa: str, status: str, valor: float) -> str:
+        # Trata telefone para manter apenas dígitos
+        tel_clean = "".join(filter(str.isdigit, str(telefone)))
+        if len(tel_clean) <= 11 and not tel_clean.startswith("55"):
+            tel_clean = f"55{tel_clean}"
+            
+        mensagem = (
+            f"Olá *{cliente}*! 🏎️\n\n"
+            f"Atualização da sua Ordem de Serviço na *LOJA Performance Enterprise*:\n\n"
+            f"📌 *O.S. nº:* #{os_id}\n"
+            f"🚘 *Veículo:* {modelo} (Placa: {placa})\n"
+            f"🚦 *Status Atual:* {status.upper()}\n"
+            f"💰 *Valor Total:* R$ {valor:.2f}\n\n"
+            f"Se precisar de suporte, estamos à disposição no box de atendimento!"
+        )
+        msg_encoded = urllib.parse.quote(mensagem)
+        return f"https://wa.me/{tel_clean}?text={msg_encoded}"
 
 # ==============================================================================
 # 4. INICIALIZAÇÃO DE SESSÃO & LOGIN
@@ -388,30 +431,24 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ==============================================================================
-# 5. ESTRUTURA PRINCIPAL (SIDEBAR & NAVEGAÇÃO)
+# 5. ESTRUTURA PRINCIPAL (SIDEBAR & NAVEGAÇÃO RBAC)
 # ==============================================================================
 st.sidebar.markdown(f"### 🏁 Piloto: **{st.session_state['usuario']}**")
 st.sidebar.markdown(f"Perfil: `{st.session_state['perfil']}`")
 st.sidebar.markdown("---")
 
-menu = st.sidebar.radio(
-    "Navegação Cockpit",
-    [
-        "🔧 Ordens de Serviço",
-        "📅 Agendamentos & Box",
-        "🚘 Clientes & Garagem",
-        "📦 Almoxarifado & Peças",
-        "🔍 Prontuário do Veículo",
-        "📊 Telemetria & Comissões"
-    ]
-)
+opcoes_menu = ["🔧 Ordens de Serviço", "📅 Agendamentos & Box", "🚘 Clientes & Garagem", "📦 Almoxarifado & Peças", "🔍 Prontuário do Veículo"]
+if st.session_state["perfil"] == "Administrador":
+    opcoes_menu.append("📊 Telemetria & Comissões")
+
+menu = st.sidebar.radio("Navegação Cockpit", opcoes_menu)
 
 if st.sidebar.button("Encerrar Sessão", use_container_width=True):
     st.session_state["autenticado"] = False
     st.rerun()
 
 # ==============================================================================
-# MÓDULO 1: ORDENS DE SERVIÇO
+# MÓDULO 1: ORDENS DE SERVIÇO (COM BAIXA AUTOMÁTICA & WHATSAPP)
 # ==============================================================================
 if menu == "🔧 Ordens de Serviço":
     st.markdown("<h2 class='header-title'>🔧 Ordens de Serviço (Fila de Box)</h2>", unsafe_allow_html=True)
@@ -456,7 +493,8 @@ if menu == "🔧 Ordens de Serviço":
                                 status=status_os,
                                 mao_de_obra=mao_obra_os,
                                 pecas_valor=custo_kit,
-                                valor_total=total
+                                valor_total=total,
+                                kit_utilizado=kit_os
                             )
                             session.add(nova_os)
                             session.commit()
@@ -483,7 +521,8 @@ if menu == "🔧 Ordens de Serviço":
             
             for os_item in ordens:
                 with st.expander(f"O.S. #{os_item.id} | [{os_item.status.upper()}] | {os_item.veiculo.placa} - {os_item.veiculo.modelo}"):
-                    st.write(f"**Cliente:** {os_item.veiculo.dono.nome} | **Mecânico:** {os_item.mecanico}")
+                    st.write(f"**Cliente:** {os_item.veiculo.dono.nome} | **Tel:** {os_item.veiculo.dono.telefone or 'Não Informado'}")
+                    st.write(f"**Mecânico:** {os_item.mecanico} | **Kit:** {os_item.kit_utilizado}")
                     st.write(f"**Diagnóstico:** {os_item.defeito}")
                     st.write(f"**Mão de Obra:** R$ {os_item.mao_de_obra:.2f} | **Peças:** R$ {os_item.pecas_valor:.2f} | **TOTAL:** R$ {os_item.valor_total:.2f}")
                     
@@ -492,6 +531,16 @@ if menu == "🔧 Ordens de Serviço":
                         novo_st = st.selectbox("Status", ["Aberta", "Em Andamento", "Concluída", "Cancelada"], key=f"st_{os_item.id}", index=["Aberta", "Em Andamento", "Concluída", "Cancelada"].index(os_item.status) if os_item.status in ["Aberta", "Em Andamento", "Concluída", "Cancelada"] else 0)
                         if st.button("Atualizar Status", key=f"btn_st_{os_item.id}"):
                             os_item.status = novo_st
+                            
+                            # Regra de Negócio: Baixa Automática no Estoque se Concluída
+                            if novo_st == "Concluída" and os_item.estoque_baixado == 0 and os_item.kit_utilizado != "Nenhum":
+                                # Tenta abater peça associada ao kit
+                                peca_ref = session.query(PecaModel).filter(PecaModel.nome.like(f"%{os_item.kit_utilizado}%")).first()
+                                if peca_ref and peca_ref.quantidade > 0:
+                                    peca_ref.quantidade -= 1
+                                os_item.estoque_baixado = 1
+                                st.info("Estoque atualizado automaticamente com a baixa do kit!")
+
                             session.commit()
                             AuditService.registrar(st.session_state["usuario"], "ALTERAR_STATUS", f"O.S. #{os_item.id} -> {novo_st}")
                             st.success("Status atualizado!")
@@ -500,13 +549,14 @@ if menu == "🔧 Ordens de Serviço":
                         pdf_data = PDFService.gerar_pdf_os(os_item.id)
                         st.download_button("📄 Imprimir PDF", pdf_data, file_name=f"OS_{os_item.id}.pdf", mime="application/pdf", key=f"pdf_{os_item.id}")
                     with c3:
-                        if st.session_state["perfil"] == "Administrador":
-                            if st.button("🗑️ Excluir O.S.", key=f"del_{os_item.id}"):
-                                session.delete(os_item)
-                                session.commit()
-                                AuditService.registrar(st.session_state["usuario"], "EXCLUIR_OS", f"O.S. #{os_item.id}")
-                                st.success("O.S. removida!")
-                                st.rerun()
+                        if os_item.veiculo.dono.telefone:
+                            link_wa = WhatsAppService.gerar_link_whatsapp(
+                                os_item.veiculo.dono.telefone, os_item.id, os_item.veiculo.dono.nome,
+                                os_item.veiculo.modelo, os_item.veiculo.placa, os_item.status, os_item.valor_total
+                            )
+                            st.markdown(f"<a href='{link_wa}' target='_blank' class='btn-whatsapp'>💬 Notificar WhatsApp</a>", unsafe_allow_html=True)
+                        else:
+                            st.caption("Sem telefone para WhatsApp")
         finally:
             session.close()
 
@@ -571,7 +621,7 @@ elif menu == "🚘 Clientes & Garagem":
         st.markdown("<h4 class='sub-title'>1. Cadastrar Proprietário</h4>", unsafe_allow_html=True)
         with st.form("form_cliente"):
             c_nome = st.text_input("Nome Completo")
-            c_tel = st.text_input("Telefone / WhatsApp")
+            c_tel = st.text_input("Telefone / WhatsApp (Ex: 11999998888)")
             c_doc = st.text_input("CPF / CNPJ")
             c_end = st.text_input("Endereço")
             if st.form_submit_button("Salvar Cliente"):
@@ -621,7 +671,7 @@ elif menu == "🚘 Clientes & Garagem":
         session.close()
 
 # ==============================================================================
-# MÓDULO 4: ALMOXARIFADO & PEÇAS
+# MÓDULO 4: ALMOXARIFADO & PEÇAS (COM CUSTO/MARKUP)
 # ==============================================================================
 elif menu == "📦 Almoxarifado & Peças":
     st.markdown("<h2 class='header-title'>📦 Inventário de Peças & Almoxarifado</h2>", unsafe_allow_html=True)
@@ -632,16 +682,17 @@ elif menu == "📦 Almoxarifado & Peças":
     with col_p1:
         st.markdown("<h4 class='sub-title'>Entrada de Autopeças</h4>", unsafe_allow_html=True)
         with st.form("form_peca"):
-            p_nome = st.text_input("Descrição da Peça")
+            p_nome = st.text_input("Descrição da Peça / Kit")
             p_cod = st.text_input("Código de Barras / Ref")
             p_qtd = st.number_input("Quantidade em Estoque", min_value=0, step=1)
             p_min = st.number_input("Estoque Mínimo", min_value=1, value=3)
-            p_preco = st.number_input("Preço de Venda (R$)", min_value=0.0, step=5.0)
+            p_custo = st.number_input("Preço Custo (R$)", min_value=0.0, step=5.0)
+            p_preco = st.number_input("Preço Venda (R$)", min_value=0.0, step=5.0)
             
             if st.form_submit_button("Registrar Peça"):
                 session = SessionLocal()
                 try:
-                    peca = PecaModel(nome=p_nome, codigo=p_cod, quantidade=int(p_qtd), estoque_minimo=int(p_min), preco_venda=p_preco)
+                    peca = PecaModel(nome=p_nome, codigo=p_cod, quantidade=int(p_qtd), estoque_minimo=int(p_min), preco_custo=p_custo, preco_venda=p_preco)
                     session.add(peca)
                     session.commit()
                     st.success("Peça adicionada ao Almoxarifado!")
@@ -659,7 +710,8 @@ elif menu == "📦 Almoxarifado & Peças":
             if pecas:
                 df_p = pd.DataFrame([{
                     "Código": p.codigo, "Peça": p.nome, "Qtd Estoque": p.quantidade,
-                    "Mínimo": p.estoque_minimo, "Preço Unitário": f"R$ {p.preco_venda:.2f}",
+                    "Mínimo": p.estoque_minimo, "Custo": f"R$ {p.preco_custo:.2f}",
+                    "Venda": f"R$ {p.preco_venda:.2f}",
                     "Status Alerta": "⚠️ REPOR ESTOQUE" if p.quantidade <= p.estoque_minimo else "✅ OK"
                 } for p in pecas])
                 st.dataframe(df_p, use_container_width=True)
@@ -700,17 +752,18 @@ elif menu == "🔍 Prontuário do Veículo":
             session.close()
 
 # ==============================================================================
-# MÓDULO 6: TELEMETRIA, COMISSÕES & LOGS (ADMIN)
+# MÓDULO 6: TELEMETRIA, DASHBOARDS INTERATIVOS & EXPORTAÇÕES (ADMIN EXCLUSIVE)
 # ==============================================================================
 elif menu == "📊 Telemetria & Comissões":
     if st.session_state["perfil"] != "Administrador":
         st.error("Acesso exclusivo para administradores.")
     else:
-        st.markdown("<h2 class='header-title'>📊 Telemetria Executiva & Comissões</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='header-title'>📊 Telemetria Executiva, BI & Backups</h2>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
         session = SessionLocal()
         try:
+            # METRICAS PRINCIPAIS
             fat_total = session.query(OrdemServicoModel.valor_total).filter(OrdemServicoModel.status == 'Concluída').all()
             total_fat = sum([f[0] for f in fat_total]) if fat_total else 0.0
             
@@ -718,6 +771,45 @@ elif menu == "📊 Telemetria & Comissões":
             c_m1.metric("Faturamento Concluído", f"R$ {total_fat:.2f}")
             c_m2.metric("O.S. Registradas", session.query(OrdemServicoModel).count())
             c_m3.metric("Frota na Garagem", session.query(VeiculoModel).count())
+            
+            st.markdown("---")
+            
+            # DASHBOARDS INTERATIVOS COM PLOTLY
+            if PLOTLY_DISPONIVEL:
+                st.markdown("<h4 class='sub-title'>Cockpit de Inteligência Financeira (BI)</h4>", unsafe_allow_html=True)
+                col_g1, col_g2 = st.columns(2)
+                
+                # Gráfico 1: Status das Ordens de Serviço
+                ordens_all = session.query(OrdemServicoModel).all()
+                if ordens_all:
+                    df_status = pd.DataFrame([{"Status": o.status} for o in ordens_all])
+                    df_status_count = df_status['Status'].value_counts().reset_index()
+                    df_status_count.columns = ['Status', 'Quantidade']
+                    
+                    fig_status = px.pie(
+                        df_status_count, values='Quantidade', names='Status',
+                        title="Distribuição de O.S. por Status",
+                        color_discrete_sequence=['#FF3B30', '#FF9500', '#34C759', '#8E8E93'],
+                        hole=0.4
+                    )
+                    fig_status.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FAFAFA')
+                    col_g1.plotly_chart(fig_status, use_container_width=True)
+                    
+                    # Gráfico 2: Composição de Receita (Mão de Obra vs Peças)
+                    total_mo = sum([o.mao_de_obra for o in ordens_all if o.status == 'Concluída'])
+                    total_pec = sum([o.pecas_valor for o in ordens_all if o.status == 'Concluída'])
+                    
+                    df_comp = pd.DataFrame({
+                        "Categoria": ["Mão de Obra", "Peças / Kits"],
+                        "Valor (R$)": [total_mo, total_pec]
+                    })
+                    fig_comp = px.bar(
+                        df_comp, x="Categoria", y="Valor (R$)", text_auto='.2f',
+                        title="Origem do Faturamento (Concluídas)",
+                        color="Categoria", color_discrete_sequence=['#FF3B30', '#34C759']
+                    )
+                    fig_comp.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FAFAFA')
+                    col_g2.plotly_chart(fig_comp, use_container_width=True)
             
             st.markdown("---")
             st.markdown("<h4 class='sub-title'>Comissões por Mecânico (20% Mão de Obra)</h4>", unsafe_allow_html=True)
@@ -732,15 +824,31 @@ elif menu == "📊 Telemetria & Comissões":
                 
                 df_com = pd.DataFrame([{"Mecânico": k, "Comissão Devida (20%)": f"R$ {v:.2f}"} for k, v in comissoes.items()])
                 st.dataframe(df_com, use_container_width=True)
-            
+
             st.markdown("---")
-            st.markdown("<h4 class='sub-title'>Logs de Auditoria de Segurança</h4>", unsafe_allow_html=True)
-            logs = session.query(AuditLogModel).order_by(AuditLogModel.id.desc()).limit(20).all()
-            if logs:
-                df_l = pd.DataFrame([{
-                    "Data/Hora": l.timestamp.strftime("%d/%m/%Y %H:%M"),
-                    "Usuário": l.usuario, "Ação": l.acao, "Detalhes": l.detalhes
-                } for l in logs])
-                st.dataframe(df_l, use_container_width=True)
+            st.markdown("<h4 class='sub-title'>Central de Exportação & Security Backup</h4>", unsafe_allow_html=True)
+            
+            e_col1, e_col2 = st.columns(2)
+            with e_col1:
+                # Exportação CSV/Excel de Ordens de Serviço
+                if ordens_all:
+                    df_export_os = pd.DataFrame([{
+                        "ID": o.id, "Data": o.data_abertura.strftime("%Y-%m-%d %H:%M"),
+                        "Placa": o.veiculo.placa, "Modelo": o.veiculo.modelo, "Cliente": o.veiculo.dono.nome,
+                        "Mecânico": o.mecanico, "Mão de Obra": o.mao_de_obra, "Peças": o.pecas_valor,
+                        "Total": o.valor_total, "Status": o.status
+                    } for o in ordens_all])
+                    
+                    csv_os = df_export_os.to_csv(index=False).encode('utf-8')
+                    st.download_button("📊 Exportar Relatório de O.S. (CSV)", csv_os, "relatorio_ordens_servico.csv", "text/csv")
+            
+            with e_col2:
+                # Backup direto do banco de dados SQLite
+                try:
+                    with open("oficina_enterprise.db", "rb") as db_file:
+                        db_bytes = db_file.read()
+                    st.download_button("💾 Baixar Backup do Banco (.DB)", db_bytes, "oficina_enterprise.db", "application/x-sqlite3")
+                except FileNotFoundError:
+                    st.caption("Banco de dados local não pronto para backup.")
         finally:
             session.close()
