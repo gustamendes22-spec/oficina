@@ -501,8 +501,12 @@ if menu == "🔧 Ordens de Serviço":
                             )
                             session.add(nova_os)
                             session.commit()
-                            AuditService.registrar(st.session_state["usuario"], "CRIAR_OS", f"O.S. #{nova_os.id} criada para {placa_os}")
-                            st.success(f"O.S. #{nova_os.id} aberta com sucesso!")
+                            
+                            # Capturamos o ID primitivo ANTES de fechar a sessão para evitar DetachedInstanceError
+                            id_gerado = nova_os.id
+
+                            AuditService.registrar(st.session_state["usuario"], "CRIAR_OS", f"O.S. #{id_gerado} criada para {placa_os}")
+                            st.success(f"O.S. #{id_gerado} aberta com sucesso!")
                             st.rerun()
                     finally:
                         session.close()
