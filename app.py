@@ -515,7 +515,6 @@ if menu == "🔧 Ordens de Serviço":
         
         session = SessionLocal()
         try:
-            # CORREÇÃO CRUCIAL: Utilização de outerjoin para evitar ocultar O.S. caso haja dados órfãos
             query = session.query(OrdemServicoModel).outerjoin(VeiculoModel).outerjoin(ClienteModel)
             if busca_os:
                 termo = f"%{busca_os.strip()}%"
@@ -595,7 +594,7 @@ if menu == "🔧 Ordens de Serviço":
             session.close()
 
 # ==============================================================================
-# MÓDULO 2: AGENDAMENTOS E BOX (GESTÃO COMPLETA)
+# MÓDULO 2: AGENDAMENTOS E BOX
 # ==============================================================================
 elif menu == "📅 Agendamentos & Box":
     st.markdown("<h2 class='header-title'>📅 Agenda de Horários & Controle de Box</h2>", unsafe_allow_html=True)
@@ -756,7 +755,7 @@ elif menu == "🚘 Clientes & Garagem":
             session.close()
 
 # ==============================================================================
-# MÓDULO 4: ALMOXARIFADO & PEÇAS (CADASTRO, EDIÇÃO E EXCLUSÃO)
+# MÓDULO 4: ALMOXARIFADO & PEÇAS
 # ==============================================================================
 elif menu == "📦 Almoxarifado & Peças":
     st.markdown("<h2 class='header-title'>📦 Inventário de Peças & Almoxarifado</h2>", unsafe_allow_html=True)
@@ -943,7 +942,7 @@ elif menu == "📊 Telemetria & Comissões":
                         "Total": o.valor_total, "Status": o.status
                     } for o in ordens_all])
                     
-                    csv_os = df_export_os.to_csv(index=False).encode('text/csv" if False else 'utf-8')
+                    csv_os = df_export_os.to_csv(index=False).encode('utf-8')
                     st.download_button("📊 Exportar Relatório de O.S. (CSV)", csv_os, "relatorio_ordens_servico.csv", "text/csv")
             
             with e_col2:
