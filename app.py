@@ -5,7 +5,7 @@ import hashlib
 import sqlite3
 import urllib.parse
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session, joinedload
 import io
 
 # --- GERADOR DE GRÁFICOS (Plotly) ---
@@ -306,7 +306,9 @@ class PDFService:
     def gerar_pdf_os(os_id: int) -> bytes:
         session = SessionLocal()
         try:
-            os_data = session.query(OrdemServicoModel).filter(OrdemServicoModel.id == os_id).first()
+            os_data = session.query(OrdemServicoModel).options(
+                joinedload(OrdemServicoModel.veiculo).joinedload(VeiculoModel.dono)
+            ).filter(OrdemServicoModel.id == os_id).first()
             if not os_data:
                 return None
             
@@ -515,7 +517,11 @@ if menu == "🔧 Ordens de Serviço":
         
         session = SessionLocal()
         try:
-            query = session.query(OrdemServicoModel).outerjoin(VeiculoModel).outerjoin(ClienteModel)
+            # CORREÇÃO CRUCIAL: Utilização de joinedload para carregar os dados em memória antes de fechar a sessão
+            query = session.query(OrdemServicoModel).options(
+                joinedload(OrdemServicoModel.veiculo).joinedload(VeiculoModel.dono)
+            ).outerjoin(VeiculoModel).outerjoin(ClienteModel)
+
             if busca_os:
                 termo = f"%{busca_os.strip()}%"
                 query = query.filter(
@@ -729,7 +735,7 @@ elif menu == "🚘 Clientes & Garagem":
 
             st.markdown("---")
             st.markdown("### 🚘 Veículos na Garagem")
-            veiculos = session.query(VeiculoModel).all()
+            veiculos = session.query(VeiculoModel).options(joinedload(VeiculoModel.dono)).all()
             for v in veiculos:
                 dono_nome = v.dono.nome if v.dono else "Sem Dono"
                 with st.expander(f"Placa: {v.placa} | Modelo: {v.modelo} | Dono: {dono_nome}"):
@@ -832,7 +838,11 @@ elif menu == "🔍 Prontuário do Veículo":
     if placa_busca:
         session = SessionLocal()
         try:
-            veic = session.query(VeiculoModel).filter(VeiculoModel.placa == placa_busca).first()
+            veic = session.query(VeiculoModel).options(
+                joinedload(VeiculoModel.dono),
+                joinedload(VeiculoModel.ordens_servico)
+            ).filter(VeiculoModel.placa == placa_busca).first()
+
             if veic:
                 nome_dono = veic.dono.nome if veic.dono else "Sem Proprietário"
                 tel_dono = veic.dono.telefone if veic.dono and veic.dono.telefone else "Não informado"
@@ -931,7 +941,9 @@ elif menu == "📊 Telemetria & Comissões":
             
             e_col1, e_col2 = st.columns(2)
             with e_col1:
-                ordens_all = session.query(OrdemServicoModel).all()
+                ordens_all = session.query(OrdemServicoModel).options(
+                    joinedload(OrdemServicoModel.veiculo).joinedload(VeiculoModel.dono)
+                ).all()
                 if ordens_all:
                     df_export_os = pd.DataFrame([{
                         "ID": o.id, "Data": o.data_abertura.strftime("%Y-%m-%d %H:%M"),
