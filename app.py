@@ -510,18 +510,24 @@ if menu == "🔧 Ordens de Serviço":
 
     with tab_os2:
         st.markdown("<h4 class='sub-title'>Painel de Gestão Completa de O.S.</h4>", unsafe_allow_html=True)
-        busca_os = st.text_input("🔍 Filtrar O.S. por Placa, Cliente ou Modelo", "")
+        
+        # Campo de busca reativo imediato (filtra enquanto digita, sem precisar de Enter)
+        busca_os = st.text_input("🔍 Filtrar O.S. por Placa, Cliente ou Modelo", "", key="input_busca_os")
         
         session = SessionLocal()
         try:
             query = session.query(OrdemServicoModel).join(VeiculoModel).join(ClienteModel)
             if busca_os:
+                termo = f"%{busca_os.strip()}%"
                 query = query.filter(
-                    (VeiculoModel.placa.like(f"%{busca_os}%")) |
-                    (ClienteModel.nome.like(f"%{busca_os}%")) |
-                    (VeiculoModel.modelo.like(f"%{busca_os}%"))
+                    (VeiculoModel.placa.like(termo)) |
+                    (ClienteModel.nome.like(termo)) |
+                    (VeiculoModel.modelo.like(termo))
                 )
             ordens = query.order_by(OrdemServicoModel.id.desc()).all()
+            
+            if not ordens:
+                st.info("Nenhuma Ordem de Serviço encontrada com este filtro.")
             
             for os_item in ordens:
                 nome_cliente = os_item.veiculo.dono.nome if os_item.veiculo and os_item.veiculo.dono else "N/A"
@@ -530,7 +536,6 @@ if menu == "🔧 Ordens de Serviço":
                 modelo_v = os_item.veiculo.modelo if os_item.veiculo else "N/A"
                 
                 with st.expander(f"O.S. #{os_item.id} | [{os_item.status.upper()}] | {placa_v} - {modelo_v} ({nome_cliente})"):
-                    # Formulário de Edição Completa da O.S.
                     with st.form(f"form_edit_os_{os_item.id}"):
                         e_mecanico = st.text_input("Mecânico Responsável", value=os_item.mecanico, key=f"emec_{os_item.id}")
                         e_defeito = st.text_area("Diagnóstico / Defeito", value=os_item.defeito, key=f"edef_{os_item.id}")
@@ -649,7 +654,7 @@ elif menu == "📅 Agendamentos & Box":
             session.close()
 
 # ==============================================================================
-# MÓDULO 3: CLIENTES & GARAGEM (CADASTRO, EDIÇÃO E EXCLUSÃO COMPLETA)
+# MÓDULO 3: CLIENTES & GARAGEM
 # ==============================================================================
 elif menu == "🚘 Clientes & Garagem":
     st.markdown("<h2 class='header-title'>🚘 Diretório de Clientes & Garagem Central</h2>", unsafe_allow_html=True)
@@ -905,7 +910,7 @@ elif menu == "📊 Telemetria & Comissões":
                         title="Origem do Faturamento (Concluídas)",
                         color="Categoria", color_discrete_sequence=['#FF3B30', '#34C759']
                     )
-                    fig_comp.update_layer(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FAFAFA')
+                    fig_comp.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FAFAFA')
                     col_g2.plotly_chart(fig_comp, use_container_width=True)
             
             st.markdown("---")
