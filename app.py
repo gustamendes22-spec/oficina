@@ -250,7 +250,7 @@ class OrdemServicoModel(Base):
     pecas_valor = Column(Float, default=0.0)
     valor_total = Column(Float, default=0.0)
     kit_utilizado = Column(String(100), default="Nenhum")
-    estoque_baixado = Column(Integer, default=0) # 0 = Não, 1 = Sim
+    estoque_baixado = Column(Integer, default=0)
     data_abertura = Column(DateTime, default=datetime.datetime.now)
     veiculo = relationship("VeiculoModel", back_populates="ordens_servico")
 
@@ -511,12 +511,12 @@ if menu == "🔧 Ordens de Serviço":
     with tab_os2:
         st.markdown("<h4 class='sub-title'>Painel de Gestão Completa de O.S.</h4>", unsafe_allow_html=True)
         
-        # Campo de busca reativo imediato (filtra enquanto digita, sem precisar de Enter)
         busca_os = st.text_input("🔍 Filtrar O.S. por Placa, Cliente ou Modelo", "", key="input_busca_os")
         
         session = SessionLocal()
         try:
-            query = session.query(OrdemServicoModel).join(VeiculoModel).join(ClienteModel)
+            # CORREÇÃO CRUCIAL: Utilização de outerjoin para evitar ocultar O.S. caso haja dados órfãos
+            query = session.query(OrdemServicoModel).outerjoin(VeiculoModel).outerjoin(ClienteModel)
             if busca_os:
                 termo = f"%{busca_os.strip()}%"
                 query = query.filter(
@@ -527,10 +527,10 @@ if menu == "🔧 Ordens de Serviço":
             ordens = query.order_by(OrdemServicoModel.id.desc()).all()
             
             if not ordens:
-                st.info("Nenhuma Ordem de Serviço encontrada com este filtro.")
+                st.info("Nenhuma Ordem de Serviço encontrada. Verifique se o veículo cadastrado possui placa correspondente.")
             
             for os_item in ordens:
-                nome_cliente = os_item.veiculo.dono.nome if os_item.veiculo and os_item.veiculo.dono else "N/A"
+                nome_cliente = os_item.veiculo.dono.nome if os_item.veiculo and os_item.veiculo.dono else "⚠️ Sem Cliente Vinculado"
                 tel_cliente = os_item.veiculo.dono.telefone if os_item.veiculo and os_item.veiculo.dono and os_item.veiculo.dono.telefone else None
                 placa_v = os_item.veiculo.placa if os_item.veiculo else "N/A"
                 modelo_v = os_item.veiculo.modelo if os_item.veiculo else "N/A"
@@ -943,7 +943,7 @@ elif menu == "📊 Telemetria & Comissões":
                         "Total": o.valor_total, "Status": o.status
                     } for o in ordens_all])
                     
-                    csv_os = df_export_os.to_csv(index=False).encode('utf-8')
+                    csv_os = df_export_os.to_csv(index=False).encode('text/csv" if False else 'utf-8')
                     st.download_button("📊 Exportar Relatório de O.S. (CSV)", csv_os, "relatorio_ordens_servico.csv", "text/csv")
             
             with e_col2:
