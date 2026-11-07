@@ -6,7 +6,6 @@ import sqlite3
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session
 import io
-import zipfile
 
 # --- GERADOR DE PDF (ReportLab) ---
 try:
@@ -19,7 +18,7 @@ except ImportError:
     REPORTLAB_DISPONIVEL = False
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT & ENGINE DE DESIGN COCKPIT DARK
+# 1. CONFIGURAÇÃO DA PÁGINA & ENGINE CSS INJECTION (DARK COCKPIT EXTREME)
 # ==============================================================================
 st.set_page_config(
     page_title="LOJA Performance Enterprise",
@@ -28,118 +27,144 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Injeção de CSS de Alta Especificidade (Sobrescreve o tema padrão do Streamlit)
+# CSS PROFUNDO: Força a sobrescrita absoluta de todos os Web Components do Streamlit
 st.markdown("""
     <style>
-    /* 1. ESTRUTURA GLOBAL E DEEP DARK BACKGROUND */
-    html, body, [data-testid="stAppViewContainer"], .stApp {
-        background-color: #0B0E14 !important;
-        color: #F0F4F8 !important;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    /* 1. FUNDO GLOBAL E REINICIALIZAÇÃO */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], .stApp {
+        background-color: #080A0F !important;
+        color: #E2E8F0 !important;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     }
     
-    /* 2. PAINEL LATERAL (SIDEBAR GRAFITE AUTOMOTIVO) */
-    [data-testid="stSidebar"] {
-        background-color: #151922 !important;
-        border-right: 1px solid #232936 !important;
-    }
-    [data-testid="stSidebar"] *, [data-testid="stSidebar"] label {
-        color: #D1D5DB !important;
+    /* Hide top bar decoration */
+    [data-testid="stHeader"] {
+        background-color: rgba(8, 10, 15, 0.95) !important;
     }
 
-    /* 3. INPUTS DE TEXTO, NUMÉRICOS E TEXTAREAS - CONSTRASTE CORRIGIDO */
-    div[data-baseweb="input"] input,
-    div[data-baseweb="base-input"] input,
-    div[data-baseweb="textarea"] textarea,
-    .stTextInput input, .stNumberInput input, .stTextArea textarea {
-        background-color: #1A202C !important;
+    /* 2. SIDEBAR METÁLICA COCKPIT */
+    [data-testid="stSidebar"], [data-testid="stSidebarContent"] {
+        background-color: #11141C !important;
+        border-right: 1px solid #1E2433 !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: #CBD5E1 !important;
+    }
+
+    /* 3. INPUTS, TEXTAREAS E NUMBER INPUTS (GRAFITE ESCURO E LETRA BRANCA) */
+    div[data-baseweb="input"],
+    div[data-baseweb="base-input"],
+    div[data-baseweb="textarea"],
+    input[type="text"], input[type="password"], input[type="number"], textarea {
+        background-color: #171C26 !important;
         color: #FFFFFF !important;
         -webkit-text-fill-color: #FFFFFF !important;
-        border: 1px solid #323D4D !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-        font-weight: 500 !important;
+        border: 1px solid #2B3448 !important;
+        border-radius: 6px !important;
     }
 
-    /* Foco nos Inputs */
-    div[data-baseweb="input"] input:focus,
-    div[data-baseweb="textarea"] textarea:focus {
+    /* Foco dos campos em Vermelho Neon */
+    div[data-baseweb="input"]:focus-within,
+    div[data-baseweb="textarea"]:focus-within {
         border-color: #FF3B30 !important;
-        box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.2) !important;
+        box-shadow: 0 0 8px rgba(255, 59, 48, 0.4) !important;
     }
 
-    /* 4. SELECTBOX / DROPDOWN CUSTOMIZADO */
-    div[data-baseweb="select"] > div {
-        background-color: #1A202C !important;
-        border: 1px solid #323D4D !important;
-        border-radius: 8px !important;
+    /* 4. DROPDOWNS / SELECTBOX (SOLUÇÃO DE CONTRASTE TOTAL) */
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="select"] span,
+    div[data-baseweb="select"] div {
+        background-color: #171C26 !important;
+        color: #FFFFFF !important;
+        border-color: #2B3448 !important;
+    }
+    /* Menu Pop-up do Selectbox */
+    ul[role="listbox"], li[role="option"] {
+        background-color: #171C26 !important;
         color: #FFFFFF !important;
     }
-    div[data-baseweb="select"] * {
+    li[role="option"]:hover, li[role="option"][aria-selected="true"] {
+        background-color: #FF3B30 !important;
         color: #FFFFFF !important;
     }
 
-    /* 5. RÓTULOS (LABELS) DE FORMULÁRIO */
-    .stMarkdown label, label, [data-testid="stWidgetLabel"] p {
-        color: #A0AEC0 !important;
-        font-size: 0.9rem !important;
+    /* 5. FORMULÁRIOS & LABELS */
+    [data-testid="stForm"] {
+        background-color: #11141C !important;
+        border: 1px solid #1E2433 !important;
+        border-radius: 12px !important;
+        padding: 24px !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+    }
+    label, [data-testid="stWidgetLabel"] p, .stMarkdown p {
+        color: #94A3B8 !important;
         font-weight: 600 !important;
         text-transform: uppercase !important;
+        font-size: 0.82rem !important;
         letter-spacing: 0.5px !important;
-        margin-bottom: 4px !important;
     }
 
-    /* 6. BOTÕES PERFORMANCE RACING (RED NEON) */
-    div.stButton > button {
-        background: linear-gradient(135deg, #FF3B30 0%, #D32F2F 100%) !important;
+    /* 6. BOTÕES HIGH-PERFORMANCE RACING */
+    div.stButton > button, div[data-testid="stFormSubmitButton"] > button {
+        background: linear-gradient(135deg, #E62E2D 0%, #A31212 100%) !important;
         color: #FFFFFF !important;
-        font-weight: 700 !important;
-        border-radius: 8px !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1px !important;
         border: none !important;
-        padding: 10px 24px !important;
-        letter-spacing: 0.5px !important;
-        box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3) !important;
-        transition: all 0.2s ease-in-out !important;
+        border-radius: 6px !important;
+        padding: 12px 24px !important;
+        box-shadow: 0 4px 15px rgba(230, 46, 45, 0.4) !important;
+        transition: all 0.2s ease !important;
     }
-    div.stButton > button:hover {
-        transform: translateY(-1px) !important;
-        box-shadow: 0 6px 16px rgba(255, 59, 48, 0.5) !important;
+    div.stButton > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {
+        background: linear-gradient(135deg, #FF3B30 0%, #C01919 100%) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(255, 59, 48, 0.6) !important;
     }
-    div.stButton > button * {
+    div.stButton > button *, div[data-testid="stFormSubmitButton"] > button * {
         color: #FFFFFF !important;
     }
 
-    /* 7. CARDS E EXPANDERS DE ORDEM DE SERVIÇO */
+    /* 7. EXPANDERS & CARDS DE O.S. */
     [data-testid="stExpander"] {
-        background-color: #151922 !important;
-        border: 1px solid #232936 !important;
-        border-radius: 10px !important;
-        margin-bottom: 12px !important;
+        background-color: #11141C !important;
+        border: 1px solid #1E2433 !important;
+        border-radius: 8px !important;
     }
     [data-testid="stExpander"] summary {
-        font-weight: 600 !important;
-        color: #F0F4F8 !important;
+        color: #F8FAFC !important;
+        font-weight: 700 !important;
     }
 
-    /* 8. CARDS DE METRICAS FINANCEIRAS */
+    /* 8. TABELAS DE DADOS (DATAFRAME) */
+    [data-testid="stDataFrame"] {
+        background-color: #11141C !important;
+        border: 1px solid #1E2433 !important;
+        border-radius: 8px !important;
+    }
+
+    /* 9. CARDS DE MÉTRICAS / TELEMETRIA */
     [data-testid="stMetric"] {
-        background-color: #151922 !important;
-        border: 1px solid #232936 !important;
-        padding: 15px !important;
-        border-radius: 10px !important;
+        background-color: #11141C !important;
+        border: 1px solid #1E2433 !important;
+        border-left: 4px solid #FF3B30 !important;
+        border-radius: 8px !important;
+        padding: 16px !important;
     }
     [data-testid="stMetricValue"] {
         color: #34C759 !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
     }
 
-    /* 9. HEADER & TITULOS */
+    /* 10. ESTILIZAÇÃO CUSTOMIZADA DE TÍTULOS */
     .header-title {
         color: #FF3B30 !important;
         font-weight: 900;
         font-size: 2.2rem;
         letter-spacing: -0.5px;
-        margin-bottom: 0px;
+        text-shadow: 0 0 15px rgba(255, 59, 48, 0.3);
+        margin-bottom: 5px;
     }
     .sub-title {
         color: #FF9500 !important;
@@ -329,11 +354,11 @@ def tela_login():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<h1 class='header-title' style='text-align: center;'>🏎️ LOJA PERFORMANCE</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #A0AEC0;'>Cockpit Enterprise Management System</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #94A3B8;'>Cockpit Enterprise Management System</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
         with st.form("form_login"):
-            usuario = st.text_input("Operador")
+            usuario = st.text_input("Operador / Usuário")
             senha = st.text_input("Chave de Acesso", type="password")
             btn_entrar = st.form_submit_button("AUTENTICAR NO COCKPIT", use_container_width=True)
             
