@@ -1,7 +1,3 @@
-with open("app.py", "r", encoding="utf-8") as f:
-    print(f.read())
-
-Saída de código
 import streamlit as st
 import pandas as pd
 import datetime
