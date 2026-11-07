@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session, joinedload
 import io
 
-# --- GERADOR DE GRÁFICOS (Plotly) ---
+# --- TENTATIVA DE IMPORTAÇÃO DE BIBLIOGRAFIAS OPCIONAIS ---
 try:
     import plotly.express as px
     import plotly.graph_objects as go
@@ -16,7 +16,6 @@ try:
 except ImportError:
     PLOTLY_DISPONIVEL = False
 
-# --- GERADOR DE PDF (ReportLab) ---
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -27,7 +26,7 @@ except ImportError:
     REPORTLAB_DISPONIVEL = False
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO DA PÁGINA & ENGINE CSS INJECTION (DARK COCKPIT EXTREME)
+# 1. CONFIGURAÇÃO DA PÁGINA & ENGINE CSS (DARK COCKPIT ENTERPRISE)
 # ==============================================================================
 st.set_page_config(
     page_title="LOJA Performance Enterprise",
@@ -38,136 +37,55 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* FUNDO GLOBAL */
     html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"], .stApp {
         background-color: #080A0F !important;
         color: #E2E8F0 !important;
         font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     }
-    
-    [data-testid="stHeader"] {
-        background-color: rgba(8, 10, 15, 0.95) !important;
-    }
-
-    /* SIDEBAR METÁLICA COCKPIT */
+    [data-testid="stHeader"] { background-color: rgba(8, 10, 15, 0.95) !important; }
     [data-testid="stSidebar"], [data-testid="stSidebarContent"] {
         background-color: #11141C !important;
         border-right: 1px solid #1E2433 !important;
     }
-    [data-testid="stSidebar"] * {
-        color: #CBD5E1 !important;
-    }
-
-    /* INPUTS E TEXTAREAS */
-    div[data-baseweb="input"],
-    div[data-baseweb="base-input"],
-    div[data-baseweb="textarea"],
-    input[type="text"], input[type="password"], input[type="number"], textarea {
+    [data-testid="stSidebar"] * { color: #CBD5E1 !important; }
+    div[data-baseweb="input"], div[data-baseweb="textarea"], input[type="text"], input[type="password"], input[type="number"], textarea {
         background-color: #171C26 !important;
         color: #FFFFFF !important;
         -webkit-text-fill-color: #FFFFFF !important;
         border: 1px solid #2B3448 !important;
         border-radius: 6px !important;
     }
-
-    div[data-baseweb="input"]:focus-within,
-    div[data-baseweb="textarea"]:focus-within {
-        border-color: #FF3B30 !important;
-        box-shadow: 0 0 8px rgba(255, 59, 48, 0.4) !important;
-    }
-
-    /* DROPDOWNS / SELECTBOX */
-    div[data-baseweb="select"] > div,
-    div[data-baseweb="select"] span,
-    div[data-baseweb="select"] div {
-        background-color: #171C26 !important;
-        color: #FFFFFF !important;
-        border-color: #2B3448 !important;
-    }
-    ul[role="listbox"], li[role="option"] {
-        background-color: #171C26 !important;
-        color: #FFFFFF !important;
-    }
-    li[role="option"]:hover, li[role="option"][aria-selected="true"] {
-        background-color: #FF3B30 !important;
-        color: #FFFFFF !important;
-    }
-
-    /* FORMULÁRIOS & LABELS */
-    [data-testid="stForm"] {
+    div[data-testid="stForm"] {
         background-color: #11141C !important;
         border: 1px solid #1E2433 !important;
         border-radius: 12px !important;
         padding: 24px !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
     }
     label, [data-testid="stWidgetLabel"] p, .stMarkdown p {
         color: #94A3B8 !important;
         font-weight: 600 !important;
         text-transform: uppercase !important;
         font-size: 0.82rem !important;
-        letter-spacing: 0.5px !important;
     }
-
-    /* BOTÕES HIGH-PERFORMANCE RACING */
     div.stButton > button, div[data-testid="stFormSubmitButton"] > button {
         background: linear-gradient(135deg, #E62E2D 0%, #A31212 100%) !important;
         color: #FFFFFF !important;
         font-weight: 800 !important;
         text-transform: uppercase !important;
-        letter-spacing: 1px !important;
         border: none !important;
         border-radius: 6px !important;
         padding: 10px 20px !important;
         box-shadow: 0 4px 15px rgba(230, 46, 45, 0.4) !important;
-        transition: all 0.2s ease !important;
     }
-    div.stButton > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {
+    div.stButton > button:hover {
         background: linear-gradient(135deg, #FF3B30 0%, #C01919 100%) !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 20px rgba(255, 59, 48, 0.6) !important;
+        transform: translateY(-2px);
     }
-    div.stButton > button *, div[data-testid="stFormSubmitButton"] > button * {
-        color: #FFFFFF !important;
-    }
-
-    /* EXPANDERS & METRICAS */
-    [data-testid="stExpander"] {
-        background-color: #11141C !important;
-        border: 1px solid #1E2433 !important;
-        border-radius: 8px !important;
-    }
-    [data-testid="stExpander"] summary {
-        color: #F8FAFC !important;
-        font-weight: 700 !important;
-    }
-
-    [data-testid="stDataFrame"] {
-        background-color: #11141C !important;
-        border: 1px solid #1E2433 !important;
-        border-radius: 8px !important;
-    }
-
-    [data-testid="stMetric"] {
-        background-color: #11141C !important;
-        border: 1px solid #1E2433 !important;
-        border-left: 4px solid #FF3B30 !important;
-        border-radius: 8px !important;
-        padding: 16px !important;
-    }
-    [data-testid="stMetricValue"] {
-        color: #34C759 !important;
-        font-weight: 900 !important;
-    }
-
-    /* TITULOS CUSTOMIZADOS */
     .header-title {
         color: #FF3B30 !important;
         font-weight: 900;
         font-size: 2.2rem;
         letter-spacing: -0.5px;
-        text-shadow: 0 0 15px rgba(255, 59, 48, 0.3);
-        margin-bottom: 5px;
     }
     .sub-title {
         color: #FF9500 !important;
@@ -175,8 +93,6 @@ st.markdown("""
         font-size: 1.1rem;
         margin-bottom: 15px;
     }
-    
-    /* LINK BOTÃO WHATSAPP */
     .btn-whatsapp {
         display: inline-block;
         background-color: #25D366;
@@ -186,11 +102,8 @@ st.markdown("""
         border-radius: 6px;
         text-decoration: none;
         text-align: center;
-        box-shadow: 0 4px 10px rgba(37, 211, 102, 0.3);
     }
-    .btn-whatsapp:hover {
-        background-color: #1EBE5D;
-    }
+    .btn-whatsapp:hover { background-color: #1EBE5D; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -389,7 +302,7 @@ class WhatsAppService:
         return f"https://wa.me/{tel_clean}?text={msg_encoded}"
 
 # ==============================================================================
-# 4. INICIALIZAÇÃO DE SESSÃO & LOGIN
+# 4. CONTROLE DE SESSÃO & LOGIN
 # ==============================================================================
 inicializar_banco()
 
@@ -436,7 +349,7 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # ==============================================================================
-# 5. ESTRUTURA PRINCIPAL (SIDEBAR & NAVEGAÇÃO RBAC)
+# 5. SIDEBAR & NAVEGAÇÃO RBAC
 # ==============================================================================
 st.sidebar.markdown(f"### 🏁 Piloto: **{st.session_state['usuario']}**")
 st.sidebar.markdown(f"Perfil: `{st.session_state['perfil']}`")
@@ -453,7 +366,7 @@ if st.sidebar.button("Encerrar Sessão", use_container_width=True):
     st.rerun()
 
 # ==============================================================================
-# MÓDULO 1: ORDENS DE SERVIÇO (ABERTURA, EDIÇÃO E EXCLUSÃO)
+# MÓDULO 1: ORDENS DE SERVIÇO
 # ==============================================================================
 if menu == "🔧 Ordens de Serviço":
     st.markdown("<h2 class='header-title'>🔧 Ordens de Serviço (Fila de Box)</h2>", unsafe_allow_html=True)
@@ -512,12 +425,10 @@ if menu == "🔧 Ordens de Serviço":
 
     with tab_os2:
         st.markdown("<h4 class='sub-title'>Painel de Gestão Completa de O.S.</h4>", unsafe_allow_html=True)
-        
         busca_os = st.text_input("🔍 Filtrar O.S. por Placa, Cliente ou Modelo", "", key="input_busca_os")
         
         session = SessionLocal()
         try:
-            # CORREÇÃO CRUCIAL: Utilização de joinedload para carregar os dados em memória antes de fechar a sessão
             query = session.query(OrdemServicoModel).options(
                 joinedload(OrdemServicoModel.veiculo).joinedload(VeiculoModel.dono)
             ).outerjoin(VeiculoModel).outerjoin(ClienteModel)
@@ -532,7 +443,7 @@ if menu == "🔧 Ordens de Serviço":
             ordens = query.order_by(OrdemServicoModel.id.desc()).all()
             
             if not ordens:
-                st.info("Nenhuma Ordem de Serviço encontrada. Verifique se o veículo cadastrado possui placa correspondente.")
+                st.info("Nenhuma Ordem de Serviço encontrada.")
             
             for os_item in ordens:
                 nome_cliente = os_item.veiculo.dono.nome if os_item.veiculo and os_item.veiculo.dono else "⚠️ Sem Cliente Vinculado"
@@ -579,7 +490,8 @@ if menu == "🔧 Ordens de Serviço":
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         pdf_data = PDFService.gerar_pdf_os(os_item.id)
-                        st.download_button("📄 Imprimir PDF", pdf_data, file_name=f"OS_{os_item.id}.pdf", mime="application/pdf", key=f"pdf_{os_item.id}")
+                        if pdf_data:
+                            st.download_button("📄 Imprimir PDF", pdf_data, file_name=f"OS_{os_item.id}.pdf", mime="application/pdf", key=f"pdf_{os_item.id}")
                     with c2:
                         if tel_cliente:
                             link_wa = WhatsAppService.gerar_link_whatsapp(
