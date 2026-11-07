@@ -1,3 +1,7 @@
+with open("app.py", "r", encoding="utf-8") as f:
+    print(f.read())
+
+Saída de código
 import streamlit as st
 import pandas as pd
 import datetime
@@ -312,7 +316,7 @@ class PDFService:
             
             buffer = io.BytesIO()
             if not REPORTLAB_DISPONIVEL:
-                txt = f"LOJA ENTERPRISE - O.S. #{os_data.id}\nCliente: {os_data.veiculo.dono.nome}\nPlaca: {os_data.veiculo.placa}\nTotal: R$ {os_data.valor_total:.2f}"
+                txt = f"LOJA ENTERPRISE - O.S. #{os_data.id}\nCliente: {os_data.veiculo.dono.nome if os_data.veiculo and os_data.veiculo.dono else 'N/A'}\nPlaca: {os_data.veiculo.placa if os_data.veiculo else 'N/A'}\nTotal: R$ {os_data.valor_total:.2f}"
                 return txt.encode('utf-8')
 
             doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
@@ -324,10 +328,14 @@ class PDFService:
             story.append(Paragraph(f"ORDEM DE SERVIÇO #{os_data.id}", styles['Heading3']))
             story.append(Spacer(1, 12))
 
+            nome_cli = os_data.veiculo.dono.nome if os_data.veiculo and os_data.veiculo.dono else "N/A"
+            mod_veic = f"{os_data.veiculo.modelo} ({os_data.veiculo.ano})" if os_data.veiculo else "N/A"
+            placa_veic = os_data.veiculo.placa if os_data.veiculo else "N/A"
+
             dados_gerais = [
                 ["Data Abertura:", os_data.data_abertura.strftime("%d/%m/%Y %H:%M"), "Status:", os_data.status.upper()],
-                ["Cliente:", os_data.veiculo.dono.nome, "Mecânico:", os_data.mecanico],
-                ["Veículo:", f"{os_data.veiculo.modelo} ({os_data.veiculo.ano})", "Placa:", os_data.veiculo.placa]
+                ["Cliente:", nome_cli, "Mecânico:", os_data.mecanico],
+                ["Veículo:", mod_veic, "Placa:", placa_veic]
             ]
             t_geral = Table(dados_gerais, colWidths=[110, 160, 90, 160])
             t_geral.setStyle(TableStyle([
@@ -366,7 +374,6 @@ class PDFService:
 class WhatsAppService:
     @staticmethod
     def gerar_link_whatsapp(telefone: str, os_id: int, cliente: str, modelo: str, placa: str, status: str, valor: float) -> str:
-        # Trata telefone para manter apenas dígitos
         tel_clean = "".join(filter(str.isdigit, str(telefone)))
         if len(tel_clean) <= 11 and not tel_clean.startswith("55"):
             tel_clean = f"55{tel_clean}"
@@ -520,8 +527,13 @@ if menu == "🔧 Ordens de Serviço":
             ordens = query.order_by(OrdemServicoModel.id.desc()).all()
             
             for os_item in ordens:
-                with st.expander(f"O.S. #{os_item.id} | [{os_item.status.upper()}] | {os_item.veiculo.placa} - {os_item.veiculo.modelo}"):
-                    st.write(f"**Cliente:** {os_item.veiculo.dono.nome} | **Tel:** {os_item.veiculo.dono.telefone or 'Não Informado'}")
+                nome_cliente = os_item.veiculo.dono.nome if os_item.veiculo and os_item.veiculo.dono else "N/A"
+                tel_cliente = os_item.veiculo.dono.telefone if os_item.veiculo and os_item.veiculo.dono and os_item.veiculo.dono.telefone else None
+                placa_v = os_item.veiculo.placa if os_item.veiculo else "N/A"
+                modelo_v = os_item.veiculo.modelo if os_item.veiculo else "N/A"
+                
+                with st.expander(f"O.S. #{os_item.id} | [{os_item.status.upper()}] | {placa_v} - {modelo_v}"):
+                    st.write(f"**Cliente:** {nome_cliente} | **Tel:** {tel_cliente or 'Não Informado'}")
                     st.write(f"**Mecânico:** {os_item.mecanico} | **Kit:** {os_item.kit_utilizado}")
                     st.write(f"**Diagnóstico:** {os_item.defeito}")
                     st.write(f"**Mão de Obra:** R$ {os_item.mao_de_obra:.2f} | **Peças:** R$ {os_item.pecas_valor:.2f} | **TOTAL:** R$ {os_item.valor_total:.2f}")
@@ -532,9 +544,7 @@ if menu == "🔧 Ordens de Serviço":
                         if st.button("Atualizar Status", key=f"btn_st_{os_item.id}"):
                             os_item.status = novo_st
                             
-                            # Regra de Negócio: Baixa Automática no Estoque se Concluída
                             if novo_st == "Concluída" and os_item.estoque_baixado == 0 and os_item.kit_utilizado != "Nenhum":
-                                # Tenta abater peça associada ao kit
                                 peca_ref = session.query(PecaModel).filter(PecaModel.nome.like(f"%{os_item.kit_utilizado}%")).first()
                                 if peca_ref and peca_ref.quantidade > 0:
                                     peca_ref.quantidade -= 1
@@ -549,10 +559,10 @@ if menu == "🔧 Ordens de Serviço":
                         pdf_data = PDFService.gerar_pdf_os(os_item.id)
                         st.download_button("📄 Imprimir PDF", pdf_data, file_name=f"OS_{os_item.id}.pdf", mime="application/pdf", key=f"pdf_{os_item.id}")
                     with c3:
-                        if os_item.veiculo.dono.telefone:
+                        if tel_cliente:
                             link_wa = WhatsAppService.gerar_link_whatsapp(
-                                os_item.veiculo.dono.telefone, os_item.id, os_item.veiculo.dono.nome,
-                                os_item.veiculo.modelo, os_item.veiculo.placa, os_item.status, os_item.valor_total
+                                tel_cliente, os_item.id, nome_cliente,
+                                modelo_v, placa_v, os_item.status, os_item.valor_total
                             )
                             st.markdown(f"<a href='{link_wa}' target='_blank' class='btn-whatsapp'>💬 Notificar WhatsApp</a>", unsafe_allow_html=True)
                         else:
@@ -662,11 +672,18 @@ elif menu == "🚘 Clientes & Garagem":
     try:
         veiculos = session.query(VeiculoModel).all()
         if veiculos:
-            df_v = pd.DataFrame([{
-                "ID Veículo": v.id, "Placa": v.placa, "Modelo": v.modelo, "Ano": v.ano,
-                "Proprietário": v.dono.nome, "Telefone": v.dono.telefone
-            } for v in veiculos])
+            lista_frota = []
+            for v in veiculos:
+                nome_dono = v.dono.nome if v.dono else "⚠️ Sem Proprietário"
+                tel_dono = v.dono.telefone if v.dono and v.dono.telefone else "-"
+                lista_frota.append({
+                    "ID Veículo": v.id, "Placa": v.placa, "Modelo": v.modelo, "Ano": v.ano,
+                    "Proprietário": nome_dono, "Telefone": tel_dono
+                })
+            df_v = pd.DataFrame(lista_frota)
             st.dataframe(df_v, use_container_width=True)
+        else:
+            st.info("Nenhum veículo cadastrado na garagem.")
     finally:
         session.close()
 
@@ -732,8 +749,11 @@ elif menu == "🔍 Prontuário do Veículo":
         try:
             veic = session.query(VeiculoModel).filter(VeiculoModel.placa == placa_busca).first()
             if veic:
+                nome_dono = veic.dono.nome if veic.dono else "Sem Proprietário"
+                tel_dono = veic.dono.telefone if veic.dono and veic.dono.telefone else "Não informado"
+                
                 st.markdown(f"### 🏎️ Veículo: **{veic.modelo}** ({veic.ano}) | Placa: `{veic.placa}`")
-                st.markdown(f"**Proprietário:** {veic.dono.nome} | **Tel:** {veic.dono.telefone}")
+                st.markdown(f"**Proprietário:** {nome_dono} | **Tel:** {tel_dono}")
                 st.markdown("---")
                 st.markdown("#### Linha do Tempo de Manutenções:")
                 
@@ -763,7 +783,6 @@ elif menu == "📊 Telemetria & Comissões":
         
         session = SessionLocal()
         try:
-            # METRICAS PRINCIPAIS
             fat_total = session.query(OrdemServicoModel.valor_total).filter(OrdemServicoModel.status == 'Concluída').all()
             total_fat = sum([f[0] for f in fat_total]) if fat_total else 0.0
             
@@ -774,12 +793,10 @@ elif menu == "📊 Telemetria & Comissões":
             
             st.markdown("---")
             
-            # DASHBOARDS INTERATIVOS COM PLOTLY
             if PLOTLY_DISPONIVEL:
                 st.markdown("<h4 class='sub-title'>Cockpit de Inteligência Financeira (BI)</h4>", unsafe_allow_html=True)
                 col_g1, col_g2 = st.columns(2)
                 
-                # Gráfico 1: Status das Ordens de Serviço
                 ordens_all = session.query(OrdemServicoModel).all()
                 if ordens_all:
                     df_status = pd.DataFrame([{"Status": o.status} for o in ordens_all])
@@ -795,7 +812,6 @@ elif menu == "📊 Telemetria & Comissões":
                     fig_status.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FAFAFA')
                     col_g1.plotly_chart(fig_status, use_container_width=True)
                     
-                    # Gráfico 2: Composição de Receita (Mão de Obra vs Peças)
                     total_mo = sum([o.mao_de_obra for o in ordens_all if o.status == 'Concluída'])
                     total_pec = sum([o.pecas_valor for o in ordens_all if o.status == 'Concluída'])
                     
@@ -830,11 +846,13 @@ elif menu == "📊 Telemetria & Comissões":
             
             e_col1, e_col2 = st.columns(2)
             with e_col1:
-                # Exportação CSV/Excel de Ordens de Serviço
+                ordens_all = session.query(OrdemServicoModel).all()
                 if ordens_all:
                     df_export_os = pd.DataFrame([{
                         "ID": o.id, "Data": o.data_abertura.strftime("%Y-%m-%d %H:%M"),
-                        "Placa": o.veiculo.placa, "Modelo": o.veiculo.modelo, "Cliente": o.veiculo.dono.nome,
+                        "Placa": o.veiculo.placa if o.veiculo else "N/A",
+                        "Modelo": o.veiculo.modelo if o.veiculo else "N/A",
+                        "Cliente": o.veiculo.dono.nome if o.veiculo and o.veiculo.dono else "N/A",
                         "Mecânico": o.mecanico, "Mão de Obra": o.mao_de_obra, "Peças": o.pecas_valor,
                         "Total": o.valor_total, "Status": o.status
                     } for o in ordens_all])
@@ -843,7 +861,6 @@ elif menu == "📊 Telemetria & Comissões":
                     st.download_button("📊 Exportar Relatório de O.S. (CSV)", csv_os, "relatorio_ordens_servico.csv", "text/csv")
             
             with e_col2:
-                # Backup direto do banco de dados SQLite
                 try:
                     with open("oficina_enterprise.db", "rb") as db_file:
                         db_bytes = db_file.read()
