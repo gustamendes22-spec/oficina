@@ -28,57 +28,82 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Injeção de CSS Customizado para Tema Cockpit Dark de Alto Desempenho
+# Injeção de CSS Customizado para Tema Cockpit Dark (Contraste Corrigido)
 st.markdown("""
     <style>
-    /* Fundo Principal e Cores de Texto */
+    /* Fundo Principal e Texto Geral */
     .stApp {
-        background-color: #0F0F12;
-        color: #FAFAFA;
+        background-color: #0F0F12 !important;
+        color: #FAFAFA !important;
     }
     
     /* Sidebar Grafite Metálico */
     [data-testid="stSidebar"] {
-        background-color: #1A1A21;
-        border-right: 1px solid #2A2A35;
+        background-color: #1A1A21 !important;
+        border-right: 1px solid #2A2A35 !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: #E0E0E0 !important;
     }
     
+    /* Campos de Entrada de Texto, Textarea e Selectbox (Escuros com Texto Branco) */
+    div[data-baseweb="input"] input,
+    div[data-baseweb="base-input"] input,
+    div[data-baseweb="textarea"] textarea {
+        background-color: #1E1E26 !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        border: 1px solid #3A3A4A !important;
+        border-radius: 6px !important;
+    }
+
+    /* Estilização para o Selectbox / Dropdown */
+    div[data-baseweb="select"] > div {
+        background-color: #1E1E26 !important;
+        color: #FFFFFF !important;
+        border: 1px solid #3A3A4A !important;
+        border-radius: 6px !important;
+    }
+    div[data-baseweb="select"] * {
+        color: #FFFFFF !important;
+    }
+
+    /* Labels / Textos acima dos campos */
+    label, p, span, div {
+        color: #E0E0E0 !important;
+    }
+
     /* Botões em Vermelho Neon Racing */
     div.stButton > button {
         background-color: #FF3B30 !important;
-        color: white !important;
+        color: #FFFFFF !important;
         font-weight: bold !important;
         border-radius: 6px !important;
         border: none !important;
-        transition: all 0.3s ease;
+    }
+    div.stButton > button * {
+        color: #FFFFFF !important;
     }
     div.stButton > button:hover {
         background-color: #D32F2F !important;
-        box-shadow: 0 0 10px rgba(255, 59, 48, 0.5);
-    }
-    
-    /* Entradas de Texto e Seletores */
-    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div {
-        background-color: #0F0F12 !important;
-        color: #FAFAFA !important;
-        border-color: #2A2A35 !important;
+        box-shadow: 0 0 10px rgba(255, 59, 48, 0.5) !important;
     }
     
     /* Métrica / Cards de Telemetria */
     [data-testid="stMetricValue"] {
         color: #34C759 !important;
-        font-family: 'Impact', sans-serif;
+        font-family: 'Impact', sans-serif !important;
     }
     
     /* Custom Headers */
     .header-title {
-        color: #FF3B30;
+        color: #FF3B30 !important;
         font-family: 'Impact', sans-serif;
         font-size: 2.2rem;
         letter-spacing: 1px;
     }
     .sub-title {
-        color: #FF9500;
+        color: #FF9500 !important;
         font-weight: bold;
     }
     </style>
