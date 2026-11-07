@@ -451,16 +451,15 @@ if st.sidebar.button("Encerrar Sessão", use_container_width=True):
     st.rerun()
 
 # ==============================================================================
-# MÓDULO 1: ORDENS DE SERVIÇO (COM BAIXA AUTOMÁTICA & WHATSAPP)
+# MÓDULO 1: ORDENS DE SERVIÇO (ABERTURA, EDIÇÃO E EXCLUSÃO)
 # ==============================================================================
 if menu == "🔧 Ordens de Serviço":
     st.markdown("<h2 class='header-title'>🔧 Ordens de Serviço (Fila de Box)</h2>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
-    col_form, col_list = st.columns([1, 2])
+    tab_os1, tab_os2 = st.tabs(["➕ Abrir Nova O.S.", "📋 Gerenciar / Editar / Excluir O.S."])
     
-    with col_form:
-        st.markdown("<h4 class='sub-title'>Abrir Nova O.S.</h4>", unsafe_allow_html=True)
+    with tab_os1:
         with st.form("form_nova_os"):
             placa_os = st.text_input("Placa do Veículo").upper()
             defeito_os = st.text_area("Diagnóstico / Defeito Relatado")
@@ -501,8 +500,6 @@ if menu == "🔧 Ordens de Serviço":
                             )
                             session.add(nova_os)
                             session.commit()
-                            
-                            # Capturamos o ID primitivo ANTES de fechar a sessão para evitar DetachedInstanceError
                             id_gerado = nova_os.id
 
                             AuditService.registrar(st.session_state["usuario"], "CRIAR_OS", f"O.S. #{id_gerado} criada para {placa_os}")
@@ -511,9 +508,9 @@ if menu == "🔧 Ordens de Serviço":
                     finally:
                         session.close()
 
-    with col_list:
-        st.markdown("<h4 class='sub-title'>Painel Reativo de O.S.</h4>", unsafe_allow_html=True)
-        busca_os = st.text_input("🔍 Filtrar por Placa, Cliente ou Modelo", "")
+    with tab_os2:
+        st.markdown("<h4 class='sub-title'>Painel de Gestão Completa de O.S.</h4>", unsafe_allow_html=True)
+        busca_os = st.text_input("🔍 Filtrar O.S. por Placa, Cliente ou Modelo", "")
         
         session = SessionLocal()
         try:
@@ -532,33 +529,48 @@ if menu == "🔧 Ordens de Serviço":
                 placa_v = os_item.veiculo.placa if os_item.veiculo else "N/A"
                 modelo_v = os_item.veiculo.modelo if os_item.veiculo else "N/A"
                 
-                with st.expander(f"O.S. #{os_item.id} | [{os_item.status.upper()}] | {placa_v} - {modelo_v}"):
-                    st.write(f"**Cliente:** {nome_cliente} | **Tel:** {tel_cliente or 'Não Informado'}")
-                    st.write(f"**Mecânico:** {os_item.mecanico} | **Kit:** {os_item.kit_utilizado}")
-                    st.write(f"**Diagnóstico:** {os_item.defeito}")
-                    st.write(f"**Mão de Obra:** R$ {os_item.mao_de_obra:.2f} | **Peças:** R$ {os_item.pecas_valor:.2f} | **TOTAL:** R$ {os_item.valor_total:.2f}")
-                    
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        novo_st = st.selectbox("Status", ["Aberta", "Em Andamento", "Concluída", "Cancelada"], key=f"st_{os_item.id}", index=["Aberta", "Em Andamento", "Concluída", "Cancelada"].index(os_item.status) if os_item.status in ["Aberta", "Em Andamento", "Concluída", "Cancelada"] else 0)
-                        if st.button("Atualizar Status", key=f"btn_st_{os_item.id}"):
-                            os_item.status = novo_st
+                with st.expander(f"O.S. #{os_item.id} | [{os_item.status.upper()}] | {placa_v} - {modelo_v} ({nome_cliente})"):
+                    # Formulário de Edição Completa da O.S.
+                    with st.form(f"form_edit_os_{os_item.id}"):
+                        e_mecanico = st.text_input("Mecânico Responsável", value=os_item.mecanico, key=f"emec_{os_item.id}")
+                        e_defeito = st.text_area("Diagnóstico / Defeito", value=os_item.defeito, key=f"edef_{os_item.id}")
+                        e_mao = st.number_input("Valor Mão de Obra (R$)", value=float(os_item.mao_de_obra), step=10.0, key=f"emao_{os_item.id}")
+                        e_kit = st.selectbox("Kit Rápido", ["Nenhum", "Kit Troca de Óleo Sintético", "Kit Revisão de Freios", "Kit Injeção Eletrônica"], index=["Nenhum", "Kit Troca de Óleo Sintético", "Kit Revisão de Freios", "Kit Injeção Eletrônica"].index(os_item.kit_utilizado) if os_item.kit_utilizado in ["Nenhum", "Kit Troca de Óleo Sintético", "Kit Revisão de Freios", "Kit Injeção Eletrônica"] else 0, key=f"ekit_{os_item.id}")
+                        e_status = st.selectbox("Status", ["Aberta", "Em Andamento", "Aguardando Peças", "Concluída", "Cancelada"], index=["Aberta", "Em Andamento", "Aguardando Peças", "Concluída", "Cancelada"].index(os_item.status) if os_item.status in ["Aberta", "Em Andamento", "Aguardando Peças", "Concluída", "Cancelada"] else 0, key=f"est_{os_item.id}")
+                        
+                        btn_salvar_alt = st.form_submit_button("💾 Salvar Alterações na O.S.", use_container_width=True)
+                        
+                        if btn_salvar_alt:
+                            custo_kit_e = 0.0
+                            if e_kit == "Kit Troca de Óleo Sintético": custo_kit_e = 220.0
+                            elif e_kit == "Kit Revisão de Freios": custo_kit_e = 380.0
+                            elif e_kit == "Kit Injeção Eletrônica": custo_kit_e = 450.0
                             
-                            if novo_st == "Concluída" and os_item.estoque_baixado == 0 and os_item.kit_utilizado != "Nenhum":
-                                peca_ref = session.query(PecaModel).filter(PecaModel.nome.like(f"%{os_item.kit_utilizado}%")).first()
+                            os_item.mecanico = e_mecanico
+                            os_item.defeito = e_defeito
+                            os_item.mao_de_obra = e_mao
+                            os_item.kit_utilizado = e_kit
+                            os_item.pecas_valor = custo_kit_e
+                            os_item.valor_total = e_mao + custo_kit_e
+                            
+                            if e_status == "Concluída" and os_item.estoque_baixado == 0 and e_kit != "Nenhum":
+                                peca_ref = session.query(PecaModel).filter(PecaModel.nome.like(f"%{e_kit}%")).first()
                                 if peca_ref and peca_ref.quantidade > 0:
                                     peca_ref.quantidade -= 1
                                 os_item.estoque_baixado = 1
                                 st.info("Estoque atualizado automaticamente com a baixa do kit!")
 
+                            os_item.status = e_status
                             session.commit()
-                            AuditService.registrar(st.session_state["usuario"], "ALTERAR_STATUS", f"O.S. #{os_item.id} -> {novo_st}")
-                            st.success("Status atualizado!")
+                            AuditService.registrar(st.session_state["usuario"], "EDITAR_OS", f"O.S. #{os_item.id} atualizada.")
+                            st.success("Ordem de serviço atualizada com sucesso!")
                             st.rerun()
-                    with c2:
+
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
                         pdf_data = PDFService.gerar_pdf_os(os_item.id)
                         st.download_button("📄 Imprimir PDF", pdf_data, file_name=f"OS_{os_item.id}.pdf", mime="application/pdf", key=f"pdf_{os_item.id}")
-                    with c3:
+                    with c2:
                         if tel_cliente:
                             link_wa = WhatsAppService.gerar_link_whatsapp(
                                 tel_cliente, os_item.id, nome_cliente,
@@ -567,20 +579,26 @@ if menu == "🔧 Ordens de Serviço":
                             st.markdown(f"<a href='{link_wa}' target='_blank' class='btn-whatsapp'>💬 Notificar WhatsApp</a>", unsafe_allow_html=True)
                         else:
                             st.caption("Sem telefone para WhatsApp")
+                    with c3:
+                        if st.button("🗑️ Excluir O.S.", key=f"del_os_{os_item.id}", use_container_width=True):
+                            session.delete(os_item)
+                            session.commit()
+                            AuditService.registrar(st.session_state["usuario"], "EXCLUIR_OS", f"O.S. #{os_item.id} excluída.")
+                            st.warning("Ordem de serviço excluída!")
+                            st.rerun()
         finally:
             session.close()
 
 # ==============================================================================
-# MÓDULO 2: AGENDAMENTOS E BOX
+# MÓDULO 2: AGENDAMENTOS E BOX (GESTÃO COMPLETA)
 # ==============================================================================
 elif menu == "📅 Agendamentos & Box":
     st.markdown("<h2 class='header-title'>📅 Agenda de Horários & Controle de Box</h2>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
-    col_a1, col_a2 = st.columns([1, 2])
+    tab_ag1, tab_ag2 = st.tabs(["➕ Novo Agendamento", "📋 Gerenciar / Excluir Agendamentos"])
     
-    with col_a1:
-        st.markdown("<h4 class='sub-title'>Novo Agendamento</h4>", unsafe_allow_html=True)
+    with tab_ag1:
         with st.form("form_agendar"):
             ag_placa = st.text_input("Placa do Veículo").upper()
             ag_cliente = st.text_input("Nome do Cliente")
@@ -601,34 +619,45 @@ elif menu == "📅 Agendamentos & Box":
                 finally:
                     session.close()
 
-    with col_a2:
-        st.markdown("<h4 class='sub-title'>Grid de Box Agendados</h4>", unsafe_allow_html=True)
+    with tab_ag2:
+        st.markdown("<h4 class='sub-title'>Grid de Agendamentos Ativos</h4>", unsafe_allow_html=True)
         session = SessionLocal()
         try:
             ags = session.query(AgendamentoModel).order_by(AgendamentoModel.data_hora.asc()).all()
             if ags:
-                df_ag = pd.DataFrame([{
-                    "ID": a.id, "Data/Hora": a.data_hora.strftime("%d/%m/%Y %H:%M"),
-                    "Placa": a.placa, "Cliente": a.cliente_nome, "Box": a.box,
-                    "Mecânico": a.mecanico, "Status": a.status
-                } for a in ags])
-                st.dataframe(df_ag, use_container_width=True)
+                for a in ags:
+                    with st.expander(f"Agendamento #{a.id} | Data: {a.data_hora.strftime('%d/%m/%Y %H:%M')} | Placa: {a.placa} ({a.box})"):
+                        with st.form(f"form_edit_ag_{a.id}"):
+                            ea_box = st.selectbox("Box", ["Box 01 - Rápido", "Box 02 - Elevador 1", "Box 03 - Elevador 2", "Box 04 - Diagnóstico"], index=["Box 01 - Rápido", "Box 02 - Elevador 1", "Box 03 - Elevador 2", "Box 04 - Diagnóstico"].index(a.box) if a.box in ["Box 01 - Rápido", "Box 02 - Elevador 1", "Box 03 - Elevador 2", "Box 04 - Diagnóstico"] else 0, key=f"ebox_{a.id}")
+                            ea_status = st.selectbox("Status", ["Agendado", "Em Andamento", "Concluído", "Cancelado"], index=["Agendado", "Em Andamento", "Concluído", "Cancelado"].index(a.status) if a.status in ["Agendado", "Em Andamento", "Concluído", "Cancelado"] else 0, key=f"east_{a.id}")
+                            
+                            if st.form_submit_button("💾 Salvar Agendamento"):
+                                a.box = ea_box
+                                a.status = ea_status
+                                session.commit()
+                                st.success("Agendamento atualizado!")
+                                st.rerun()
+                        
+                        if st.button("🗑️ Excluir Agendamento", key=f"del_ag_{a.id}"):
+                            session.delete(a)
+                            session.commit()
+                            st.warning("Agendamento excluído!")
+                            st.rerun()
             else:
                 st.info("Nenhum agendamento pendente.")
         finally:
             session.close()
 
 # ==============================================================================
-# MÓDULO 3: CLIENTES & GARAGEM
+# MÓDULO 3: CLIENTES & GARAGEM (CADASTRO, EDIÇÃO E EXCLUSÃO COMPLETA)
 # ==============================================================================
 elif menu == "🚘 Clientes & Garagem":
     st.markdown("<h2 class='header-title'>🚘 Diretório de Clientes & Garagem Central</h2>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
-    c_cli, c_veic = st.columns(2)
+    tab_cg1, tab_cg2, tab_cg3 = st.tabs(["➕ Cadastrar Proprietário", "🚘 Vincular Veículo", "📋 Gerenciar / Editar / Excluir Tudo"])
     
-    with c_cli:
-        st.markdown("<h4 class='sub-title'>1. Cadastrar Proprietário</h4>", unsafe_allow_html=True)
+    with tab_cg1:
         with st.form("form_cliente"):
             c_nome = st.text_input("Nome Completo")
             c_tel = st.text_input("Telefone / WhatsApp (Ex: 11999998888)")
@@ -646,8 +675,7 @@ elif menu == "🚘 Clientes & Garagem":
                     finally:
                         session.close()
     
-    with c_veic:
-        st.markdown("<h4 class='sub-title'>2. Vincular Veículo na Garagem</h4>", unsafe_allow_html=True)
+    with tab_cg2:
         with st.form("form_veiculo"):
             v_cli_id = st.number_input("ID do Proprietário", step=1)
             v_placa = st.text_input("Placa (Ex: ABC1D23)").upper()
@@ -662,42 +690,76 @@ elif menu == "🚘 Clientes & Garagem":
                     st.success(f"Veículo {v_modelo} ({v_placa}) registrado!")
                     st.rerun()
                 except:
-                    st.error("Erro ao cadastrar. Verifique a placa ou o ID do cliente.")
+                    st.error("Erro ao cadastrar. Verifique a placa ou se o ID do proprietário existe.")
                 finally:
                     session.close()
 
-    st.markdown("---")
-    st.markdown("<h4 class='sub-title'>Frota Cadastrada</h4>", unsafe_allow_html=True)
-    session = SessionLocal()
-    try:
-        veiculos = session.query(VeiculoModel).all()
-        if veiculos:
-            lista_frota = []
+    with tab_cg3:
+        st.markdown("<h4 class='sub-title'>Gestão de Clientes & Veículos Cadastrados</h4>", unsafe_allow_html=True)
+        session = SessionLocal()
+        try:
+            clientes = session.query(ClienteModel).all()
+            st.markdown("### 👤 Clientes Cadastrados")
+            for cli in clientes:
+                with st.expander(f"Cliente ID #{cli.id} - {cli.nome} ({cli.telefone or 'Sem Tel'})"):
+                    with st.form(f"form_edit_cli_{cli.id}"):
+                        ec_nome = st.text_input("Nome", value=cli.nome, key=f"cnome_{cli.id}")
+                        ec_tel = st.text_input("Telefone", value=cli.telefone or "", key=f"ctel_{cli.id}")
+                        ec_doc = st.text_input("Documento", value=cli.documento or "", key=f"cdoc_{cli.id}")
+                        ec_end = st.text_input("Endereço", value=cli.endereco or "", key=f"cend_{cli.id}")
+                        
+                        if st.form_submit_button("💾 Atualizar Cliente"):
+                            cli.nome = ec_nome
+                            cli.telefone = ec_tel
+                            cli.documento = ec_doc
+                            cli.endereco = ec_end
+                            session.commit()
+                            st.success("Cliente atualizado!")
+                            st.rerun()
+                    
+                    if st.button(f"🗑️ Excluir Cliente #{cli.id} (e seus veículos)", key=f"del_cli_{cli.id}"):
+                        session.delete(cli)
+                        session.commit()
+                        st.warning("Cliente e veículos associados excluídos!")
+                        st.rerun()
+
+            st.markdown("---")
+            st.markdown("### 🚘 Veículos na Garagem")
+            veiculos = session.query(VeiculoModel).all()
             for v in veiculos:
-                nome_dono = v.dono.nome if v.dono else "⚠️ Sem Proprietário"
-                tel_dono = v.dono.telefone if v.dono and v.dono.telefone else "-"
-                lista_frota.append({
-                    "ID Veículo": v.id, "Placa": v.placa, "Modelo": v.modelo, "Ano": v.ano,
-                    "Proprietário": nome_dono, "Telefone": tel_dono
-                })
-            df_v = pd.DataFrame(lista_frota)
-            st.dataframe(df_v, use_container_width=True)
-        else:
-            st.info("Nenhum veículo cadastrado na garagem.")
-    finally:
-        session.close()
+                dono_nome = v.dono.nome if v.dono else "Sem Dono"
+                with st.expander(f"Placa: {v.placa} | Modelo: {v.modelo} | Dono: {dono_nome}"):
+                    with st.form(f"form_edit_veic_{v.id}"):
+                        ev_modelo = st.text_input("Modelo", value=v.modelo, key=f"vmod_{v.id}")
+                        ev_ano = st.text_input("Ano", value=v.ano or "", key=f"vano_{v.id}")
+                        ev_placa = st.text_input("Placa", value=v.placa, key=f"vpla_{v.id}").upper()
+                        
+                        if st.form_submit_button("💾 Atualizar Veículo"):
+                            v.modelo = ev_modelo
+                            v.ano = ev_ano
+                            v.placa = ev_placa
+                            session.commit()
+                            st.success("Veículo atualizado!")
+                            st.rerun()
+                    
+                    if st.button(f"🗑️ Excluir Veículo {v.placa}", key=f"del_veic_{v.id}"):
+                        session.delete(v)
+                        session.commit()
+                        st.warning("Veículo excluído!")
+                        st.rerun()
+        finally:
+            session.close()
 
 # ==============================================================================
-# MÓDULO 4: ALMOXARIFADO & PEÇAS (COM CUSTO/MARKUP)
+# MÓDULO 4: ALMOXARIFADO & PEÇAS (CADASTRO, EDIÇÃO E EXCLUSÃO)
 # ==============================================================================
 elif menu == "📦 Almoxarifado & Peças":
     st.markdown("<h2 class='header-title'>📦 Inventário de Peças & Almoxarifado</h2>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
-    col_p1, col_p2 = st.columns([1, 2])
+    tab_p1, tab_p2 = st.tabs(["➕ Cadastrar Peça", "📋 Gerenciar / Editar / Excluir Peças"])
     
-    with col_p1:
-        st.markdown("<h4 class='sub-title'>Entrada de Autopeças</h4>", unsafe_allow_html=True)
+    with tab_p1:
         with st.form("form_peca"):
             p_nome = st.text_input("Descrição da Peça / Kit")
             p_cod = st.text_input("Código de Barras / Ref")
@@ -719,19 +781,38 @@ elif menu == "📦 Almoxarifado & Peças":
                 finally:
                     session.close()
 
-    with col_p2:
-        st.markdown("<h4 class='sub-title'>Estoque & Alertas de Reposição</h4>", unsafe_allow_html=True)
+    with tab_p2:
+        st.markdown("<h4 class='sub-title'>Gestão de Estoque</h4>", unsafe_allow_html=True)
         session = SessionLocal()
         try:
             pecas = session.query(PecaModel).all()
             if pecas:
-                df_p = pd.DataFrame([{
-                    "Código": p.codigo, "Peça": p.nome, "Qtd Estoque": p.quantidade,
-                    "Mínimo": p.estoque_minimo, "Custo": f"R$ {p.preco_custo:.2f}",
-                    "Venda": f"R$ {p.preco_venda:.2f}",
-                    "Status Alerta": "⚠️ REPOR ESTOQUE" if p.quantidade <= p.estoque_minimo else "✅ OK"
-                } for p in pecas])
-                st.dataframe(df_p, use_container_width=True)
+                for p in pecas:
+                    with st.expander(f"Ref: {p.codigo} | Peça: {p.nome} | Qtd: {p.quantidade} | Venda: R$ {p.preco_venda:.2f}"):
+                        with st.form(f"form_edit_peca_{p.id}"):
+                            ep_nome = st.text_input("Nome", value=p.nome, key=f"pnome_{p.id}")
+                            ep_qtd = st.number_input("Quantidade", value=int(p.quantidade), min_value=0, step=1, key=f"pqtd_{p.id}")
+                            ep_min = st.number_input("Mínimo", value=int(p.estoque_minimo), min_value=1, key=f"pmin_{p.id}")
+                            ep_custo = st.number_input("Custo R$", value=float(p.preco_custo), step=5.0, key=f"pcusto_{p.id}")
+                            ep_preco = st.number_input("Venda R$", value=float(p.preco_venda), step=5.0, key=f"ppreco_{p.id}")
+                            
+                            if st.form_submit_button("💾 Salvar Alterações na Peça"):
+                                p.nome = ep_nome
+                                p.quantidade = ep_qtd
+                                p.estoque_minimo = ep_min
+                                p.preco_custo = ep_custo
+                                p.preco_venda = ep_preco
+                                session.commit()
+                                st.success("Peça atualizada!")
+                                st.rerun()
+                        
+                        if st.button("🗑️ Excluir Peça", key=f"del_peca_{p.id}"):
+                            session.delete(p)
+                            session.commit()
+                            st.warning("Peça excluída do estoque!")
+                            st.rerun()
+            else:
+                st.info("Nenhuma peça cadastrada.")
         finally:
             session.close()
 
@@ -824,7 +905,7 @@ elif menu == "📊 Telemetria & Comissões":
                         title="Origem do Faturamento (Concluídas)",
                         color="Categoria", color_discrete_sequence=['#FF3B30', '#34C759']
                     )
-                    fig_comp.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FAFAFA')
+                    fig_comp.update_layer(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#FAFAFA')
                     col_g2.plotly_chart(fig_comp, use_container_width=True)
             
             st.markdown("---")
