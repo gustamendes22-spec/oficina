@@ -590,13 +590,11 @@ elif menu == "🔍 Prontuário do Veículo":
                 
                 if veic.ordens_servico:
                     for os_item in sorted(veic.ordens_servico, key=lambda x: x.id, reverse=True):
-                        st.info(f"**O.S. #{os_item.id}** - Data: {os_item.data_abertura.strftime('%d/%m/%Y %H:%M')} | Status: [{os_item.status}]
-
-"
-                                f"**Mecânico:** {os_item.mecanico} | **Diagnóstico:** {os_item.defeito}
-
-"
-                                f"**Mão de Obra:** R$ {os_item.mao_de_obra:.2f} | **Peças:** R$ {os_item.pecas_valor:.2f} | **TOTAL:** R$ {os_item.valor_total:.2f}")
+                        st.info(
+                            f"**O.S. #{os_item.id}** - Data: {os_item.data_abertura.strftime('%d/%m/%Y %H:%M')} | Status: [{os_item.status}]\n\n"
+                            f"**Mecânico:** {os_item.mecanico} | **Diagnóstico:** {os_item.defeito}\n\n"
+                            f"**Mão de Obra:** R$ {os_item.mao_de_obra:.2f} | **Peças:** R$ {os_item.pecas_valor:.2f} | **TOTAL:** R$ {os_item.valor_total:.2f}"
+                        )
                 else:
                     st.warning("Nenhuma O.S. cadastrada para este veículo.")
             else:
@@ -615,7 +613,6 @@ elif menu == "📊 Telemetria & Comissões":
         
         session = SessionLocal()
         try:
-            # Métricas Financeiras
             fat_total = session.query(OrdemServicoModel.valor_total).filter(OrdemServicoModel.status == 'Concluída').all()
             total_fat = sum([f[0] for f in fat_total]) if fat_total else 0.0
             
