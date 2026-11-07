@@ -19,7 +19,7 @@ except ImportError:
     REPORTLAB_DISPONIVEL = False
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT & DESIGN AUTOMOTIVO COCKPIT DARK
+# 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT & ENGINE DE DESIGN COCKPIT DARK
 # ==============================================================================
 st.set_page_config(
     page_title="LOJA Performance Enterprise",
@@ -28,83 +28,124 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Injeção de CSS Customizado para Tema Cockpit Dark (Contraste Corrigido)
+# Injeção de CSS de Alta Especificidade (Sobrescreve o tema padrão do Streamlit)
 st.markdown("""
     <style>
-    /* Fundo Principal e Texto Geral */
-    .stApp {
-        background-color: #0F0F12 !important;
-        color: #FAFAFA !important;
+    /* 1. ESTRUTURA GLOBAL E DEEP DARK BACKGROUND */
+    html, body, [data-testid="stAppViewContainer"], .stApp {
+        background-color: #0B0E14 !important;
+        color: #F0F4F8 !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
     
-    /* Sidebar Grafite Metálico */
+    /* 2. PAINEL LATERAL (SIDEBAR GRAFITE AUTOMOTIVO) */
     [data-testid="stSidebar"] {
-        background-color: #1A1A21 !important;
-        border-right: 1px solid #2A2A35 !important;
+        background-color: #151922 !important;
+        border-right: 1px solid #232936 !important;
     }
-    [data-testid="stSidebar"] * {
-        color: #E0E0E0 !important;
-    }
-    
-    /* Campos de Entrada de Texto, Textarea e Selectbox (Escuros com Texto Branco) */
-    div[data-baseweb="input"] input,
-    div[data-baseweb="base-input"] input,
-    div[data-baseweb="textarea"] textarea {
-        background-color: #1E1E26 !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        border: 1px solid #3A3A4A !important;
-        border-radius: 6px !important;
+    [data-testid="stSidebar"] *, [data-testid="stSidebar"] label {
+        color: #D1D5DB !important;
     }
 
-    /* Estilização para o Selectbox / Dropdown */
-    div[data-baseweb="select"] > div {
-        background-color: #1E1E26 !important;
+    /* 3. INPUTS DE TEXTO, NUMÉRICOS E TEXTAREAS - CONSTRASTE CORRIGIDO */
+    div[data-baseweb="input"] input,
+    div[data-baseweb="base-input"] input,
+    div[data-baseweb="textarea"] textarea,
+    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+        background-color: #1A202C !important;
         color: #FFFFFF !important;
-        border: 1px solid #3A3A4A !important;
-        border-radius: 6px !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        border: 1px solid #323D4D !important;
+        border-radius: 8px !important;
+        padding: 10px !important;
+        font-weight: 500 !important;
+    }
+
+    /* Foco nos Inputs */
+    div[data-baseweb="input"] input:focus,
+    div[data-baseweb="textarea"] textarea:focus {
+        border-color: #FF3B30 !important;
+        box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.2) !important;
+    }
+
+    /* 4. SELECTBOX / DROPDOWN CUSTOMIZADO */
+    div[data-baseweb="select"] > div {
+        background-color: #1A202C !important;
+        border: 1px solid #323D4D !important;
+        border-radius: 8px !important;
+        color: #FFFFFF !important;
     }
     div[data-baseweb="select"] * {
         color: #FFFFFF !important;
     }
 
-    /* Labels / Textos acima dos campos */
-    label, p, span, div {
-        color: #E0E0E0 !important;
+    /* 5. RÓTULOS (LABELS) DE FORMULÁRIO */
+    .stMarkdown label, label, [data-testid="stWidgetLabel"] p {
+        color: #A0AEC0 !important;
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        margin-bottom: 4px !important;
     }
 
-    /* Botões em Vermelho Neon Racing */
+    /* 6. BOTÕES PERFORMANCE RACING (RED NEON) */
     div.stButton > button {
-        background-color: #FF3B30 !important;
+        background: linear-gradient(135deg, #FF3B30 0%, #D32F2F 100%) !important;
         color: #FFFFFF !important;
-        font-weight: bold !important;
-        border-radius: 6px !important;
+        font-weight: 700 !important;
+        border-radius: 8px !important;
         border: none !important;
+        padding: 10px 24px !important;
+        letter-spacing: 0.5px !important;
+        box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3) !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+    div.stButton > button:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 16px rgba(255, 59, 48, 0.5) !important;
     }
     div.stButton > button * {
         color: #FFFFFF !important;
     }
-    div.stButton > button:hover {
-        background-color: #D32F2F !important;
-        box-shadow: 0 0 10px rgba(255, 59, 48, 0.5) !important;
+
+    /* 7. CARDS E EXPANDERS DE ORDEM DE SERVIÇO */
+    [data-testid="stExpander"] {
+        background-color: #151922 !important;
+        border: 1px solid #232936 !important;
+        border-radius: 10px !important;
+        margin-bottom: 12px !important;
     }
-    
-    /* Métrica / Cards de Telemetria */
+    [data-testid="stExpander"] summary {
+        font-weight: 600 !important;
+        color: #F0F4F8 !important;
+    }
+
+    /* 8. CARDS DE METRICAS FINANCEIRAS */
+    [data-testid="stMetric"] {
+        background-color: #151922 !important;
+        border: 1px solid #232936 !important;
+        padding: 15px !important;
+        border-radius: 10px !important;
+    }
     [data-testid="stMetricValue"] {
         color: #34C759 !important;
-        font-family: 'Impact', sans-serif !important;
+        font-weight: 800 !important;
     }
-    
-    /* Custom Headers */
+
+    /* 9. HEADER & TITULOS */
     .header-title {
         color: #FF3B30 !important;
-        font-family: 'Impact', sans-serif;
+        font-weight: 900;
         font-size: 2.2rem;
-        letter-spacing: 1px;
+        letter-spacing: -0.5px;
+        margin-bottom: 0px;
     }
     .sub-title {
         color: #FF9500 !important;
-        font-weight: bold;
+        font-weight: 700;
+        font-size: 1.1rem;
+        margin-bottom: 15px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -288,10 +329,11 @@ def tela_login():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<h1 class='header-title' style='text-align: center;'>🏎️ LOJA PERFORMANCE</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: gray;'>Gestão Automotiva Cockpit Enterprise</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #A0AEC0;'>Cockpit Enterprise Management System</p>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         
         with st.form("form_login"):
-            usuario = st.text_input("Usuário do Operador")
+            usuario = st.text_input("Operador")
             senha = st.text_input("Chave de Acesso", type="password")
             btn_entrar = st.form_submit_button("AUTENTICAR NO COCKPIT", use_container_width=True)
             
@@ -309,7 +351,7 @@ def tela_login():
                         st.session_state["usuario"] = user_db.usuario
                         st.session_state["perfil"] = user_db.perfil
                         AuditService.registrar(user_db.usuario, "LOGIN", f"Perfil: {user_db.perfil}")
-                        st.success("Login efetuado com sucesso!")
+                        st.success("Autenticado com sucesso!")
                         st.rerun()
                     else:
                         st.error("Credenciais automotivas inválidas.")
@@ -348,6 +390,7 @@ if st.sidebar.button("Encerrar Sessão", use_container_width=True):
 # ==============================================================================
 if menu == "🔧 Ordens de Serviço":
     st.markdown("<h2 class='header-title'>🔧 Ordens de Serviço (Fila de Box)</h2>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
     col_form, col_list = st.columns([1, 2])
     
@@ -379,7 +422,7 @@ if menu == "🔧 Ordens de Serviço":
                     try:
                         veic = session.query(VeiculoModel).filter(VeiculoModel.placa == placa_os).first()
                         if not veic:
-                            st.error(f"Veículo com placa '{placa_os}' não encontrado na Garagem!")
+                            st.error(f"Veículo de placa '{placa_os}' não localizado na Garagem!")
                         else:
                             nova_os = OrdemServicoModel(
                                 veiculo_id=veic.id,
@@ -393,7 +436,7 @@ if menu == "🔧 Ordens de Serviço":
                             session.add(nova_os)
                             session.commit()
                             AuditService.registrar(st.session_state["usuario"], "CRIAR_OS", f"O.S. #{nova_os.id} criada para {placa_os}")
-                            st.success(f"O.S. #{nova_os.id} criada com sucesso!")
+                            st.success(f"O.S. #{nova_os.id} aberta com sucesso!")
                             st.rerun()
                     finally:
                         session.close()
@@ -421,8 +464,8 @@ if menu == "🔧 Ordens de Serviço":
                     
                     c1, c2, c3 = st.columns(3)
                     with c1:
-                        novo_st = st.selectbox("Atualizar Status", ["Aberta", "Em Andamento", "Concluída", "Cancelada"], key=f"st_{os_item.id}", index=["Aberta", "Em Andamento", "Concluída", "Cancelada"].index(os_item.status) if os_item.status in ["Aberta", "Em Andamento", "Concluída", "Cancelada"] else 0)
-                        if st.button("Salvar Status", key=f"btn_st_{os_item.id}"):
+                        novo_st = st.selectbox("Status", ["Aberta", "Em Andamento", "Concluída", "Cancelada"], key=f"st_{os_item.id}", index=["Aberta", "Em Andamento", "Concluída", "Cancelada"].index(os_item.status) if os_item.status in ["Aberta", "Em Andamento", "Concluída", "Cancelada"] else 0)
+                        if st.button("Atualizar Status", key=f"btn_st_{os_item.id}"):
                             os_item.status = novo_st
                             session.commit()
                             AuditService.registrar(st.session_state["usuario"], "ALTERAR_STATUS", f"O.S. #{os_item.id} -> {novo_st}")
@@ -430,7 +473,7 @@ if menu == "🔧 Ordens de Serviço":
                             st.rerun()
                     with c2:
                         pdf_data = PDFService.gerar_pdf_os(os_item.id)
-                        st.download_button("📄 Baixar PDF", pdf_data, file_name=f"OS_{os_item.id}.pdf", mime="application/pdf", key=f"pdf_{os_item.id}")
+                        st.download_button("📄 Imprimir PDF", pdf_data, file_name=f"OS_{os_item.id}.pdf", mime="application/pdf", key=f"pdf_{os_item.id}")
                     with c3:
                         if st.session_state["perfil"] == "Administrador":
                             if st.button("🗑️ Excluir O.S.", key=f"del_{os_item.id}"):
@@ -447,6 +490,7 @@ if menu == "🔧 Ordens de Serviço":
 # ==============================================================================
 elif menu == "📅 Agendamentos & Box":
     st.markdown("<h2 class='header-title'>📅 Agenda de Horários & Controle de Box</h2>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
     col_a1, col_a2 = st.columns([1, 2])
     
@@ -467,7 +511,7 @@ elif menu == "📅 Agendamentos & Box":
                     ag = AgendamentoModel(placa=ag_placa, cliente_nome=ag_cliente, box=ag_box, mecanico=ag_mecanico, data_hora=dt_final)
                     session.add(ag)
                     session.commit()
-                    st.success("Agendamento cadastrado no Grid de Box!")
+                    st.success("Agendamento confirmado no Grid!")
                     st.rerun()
                 finally:
                     session.close()
@@ -485,7 +529,7 @@ elif menu == "📅 Agendamentos & Box":
                 } for a in ags])
                 st.dataframe(df_ag, use_container_width=True)
             else:
-                st.info("Nenhum agendamento pendente no Grid.")
+                st.info("Nenhum agendamento pendente.")
         finally:
             session.close()
 
@@ -494,6 +538,7 @@ elif menu == "📅 Agendamentos & Box":
 # ==============================================================================
 elif menu == "🚘 Clientes & Garagem":
     st.markdown("<h2 class='header-title'>🚘 Diretório de Clientes & Garagem Central</h2>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
     c_cli, c_veic = st.columns(2)
     
@@ -511,7 +556,7 @@ elif menu == "🚘 Clientes & Garagem":
                         cli = ClienteModel(nome=c_nome, telefone=c_tel, documento=c_doc, endereco=c_end)
                         session.add(cli)
                         session.commit()
-                        st.success(f"Cliente cadastrado com ID: {cli.id}")
+                        st.success(f"Cliente registrado com ID: {cli.id}")
                         st.rerun()
                     finally:
                         session.close()
@@ -519,7 +564,7 @@ elif menu == "🚘 Clientes & Garagem":
     with c_veic:
         st.markdown("<h4 class='sub-title'>2. Vincular Veículo na Garagem</h4>", unsafe_allow_html=True)
         with st.form("form_veiculo"):
-            v_cli_id = st.number_input("ID do Proprietário (Dono)", step=1)
+            v_cli_id = st.number_input("ID do Proprietário", step=1)
             v_placa = st.text_input("Placa (Ex: ABC1D23)").upper()
             v_modelo = st.text_input("Modelo / Versão")
             v_ano = st.text_input("Ano Fabricação/Modelo")
@@ -537,7 +582,7 @@ elif menu == "🚘 Clientes & Garagem":
                     session.close()
 
     st.markdown("---")
-    st.markdown("<h4 class='sub-title'>Frota de Veículos Cadastrada</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 class='sub-title'>Frota Cadastrada</h4>", unsafe_allow_html=True)
     session = SessionLocal()
     try:
         veiculos = session.query(VeiculoModel).all()
@@ -555,6 +600,7 @@ elif menu == "🚘 Clientes & Garagem":
 # ==============================================================================
 elif menu == "📦 Almoxarifado & Peças":
     st.markdown("<h2 class='header-title'>📦 Inventário de Peças & Almoxarifado</h2>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
     col_p1, col_p2 = st.columns([1, 2])
     
@@ -564,7 +610,7 @@ elif menu == "📦 Almoxarifado & Peças":
             p_nome = st.text_input("Descrição da Peça")
             p_cod = st.text_input("Código de Barras / Ref")
             p_qtd = st.number_input("Quantidade em Estoque", min_value=0, step=1)
-            p_min = st.number_input("Estoque Mínimo de Segurança", min_value=1, value=3)
+            p_min = st.number_input("Estoque Mínimo", min_value=1, value=3)
             p_preco = st.number_input("Preço de Venda (R$)", min_value=0.0, step=5.0)
             
             if st.form_submit_button("Registrar Peça"):
@@ -573,7 +619,7 @@ elif menu == "📦 Almoxarifado & Peças":
                     peca = PecaModel(nome=p_nome, codigo=p_cod, quantidade=int(p_qtd), estoque_minimo=int(p_min), preco_venda=p_preco)
                     session.add(peca)
                     session.commit()
-                    st.success("Peça cadastrada no Almoxarifado!")
+                    st.success("Peça adicionada ao Almoxarifado!")
                     st.rerun()
                 except:
                     st.error("Código de peça já existente.")
@@ -581,7 +627,7 @@ elif menu == "📦 Almoxarifado & Peças":
                     session.close()
 
     with col_p2:
-        st.markdown("<h4 class='sub-title'>Estoque & Alerta de Reposição</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 class='sub-title'>Estoque & Alertas de Reposição</h4>", unsafe_allow_html=True)
         session = SessionLocal()
         try:
             pecas = session.query(PecaModel).all()
@@ -600,8 +646,9 @@ elif menu == "📦 Almoxarifado & Peças":
 # ==============================================================================
 elif menu == "🔍 Prontuário do Veículo":
     st.markdown("<h2 class='header-title'>🔍 Prontuário & Histórico Automotivo</h2>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    placa_busca = st.text_input("Digite a Placa do Veículo para Consultar o Histórico", "").upper()
+    placa_busca = st.text_input("Digite a Placa do Veículo para Consultar", "").upper()
     
     if placa_busca:
         session = SessionLocal()
@@ -611,7 +658,7 @@ elif menu == "🔍 Prontuário do Veículo":
                 st.markdown(f"### 🏎️ Veículo: **{veic.modelo}** ({veic.ano}) | Placa: `{veic.placa}`")
                 st.markdown(f"**Proprietário:** {veic.dono.nome} | **Tel:** {veic.dono.telefone}")
                 st.markdown("---")
-                st.markdown("#### Linha do Tempo de Serviços Realizados:")
+                st.markdown("#### Linha do Tempo de Manutenções:")
                 
                 if veic.ordens_servico:
                     for os_item in sorted(veic.ordens_servico, key=lambda x: x.id, reverse=True):
@@ -634,7 +681,8 @@ elif menu == "📊 Telemetria & Comissões":
     if st.session_state["perfil"] != "Administrador":
         st.error("Acesso exclusivo para administradores.")
     else:
-        st.markdown("<h2 class='header-title'>📊 Painel Executivo de Telemetria & Comissões</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='header-title'>📊 Telemetria Executiva & Comissões</h2>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         
         session = SessionLocal()
         try:
@@ -642,12 +690,12 @@ elif menu == "📊 Telemetria & Comissões":
             total_fat = sum([f[0] for f in fat_total]) if fat_total else 0.0
             
             c_m1, c_m2, c_m3 = st.columns(3)
-            c_m1.metric("Faturamento Bruto (Concluídas)", f"R$ {total_fat:.2f}")
-            c_m2.metric("Total O.S. Registradas", session.query(OrdemServicoModel).count())
-            c_m3.metric("Veículos na Garagem", session.query(VeiculoModel).count())
+            c_m1.metric("Faturamento Concluído", f"R$ {total_fat:.2f}")
+            c_m2.metric("O.S. Registradas", session.query(OrdemServicoModel).count())
+            c_m3.metric("Frota na Garagem", session.query(VeiculoModel).count())
             
             st.markdown("---")
-            st.markdown("<h4 class='sub-title'>Cálculo de Comissão por Mecânico (20% Mão de Obra)</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 class='sub-title'>Comissões por Mecânico (20% Mão de Obra)</h4>", unsafe_allow_html=True)
             
             ordens_conc = session.query(OrdemServicoModel).filter(OrdemServicoModel.status == 'Concluída').all()
             if ordens_conc:
