@@ -1,6 +1,18 @@
+# Coloque este arquivo em  .streamlit/config.toml  (na pasta do projeto)
+
 [theme]
+base = "dark"
 primaryColor = "#FF3B30"
 backgroundColor = "#0B0E14"
 secondaryBackgroundColor = "#151922"
 textColor = "#F0F4F8"
 font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
