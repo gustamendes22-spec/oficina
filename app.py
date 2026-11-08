@@ -1,17 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-LOJA Performance Enterprise  -  v2.0
+LOJA Performance Enterprise  -  v2.1
 Sistema de gestão para oficina mecânica (Streamlit + SQLAlchemy + SQLite)
 
-Principais recursos:
-  * Login seguro (PBKDF2 + salt, bloqueio por tentativas, troca de senha obrigatória)
-  * Perfis de acesso (Administrador / Atendimento / Mecânico) aplicados em cada ação
-  * Painel operacional com quadro de O.S. por status, agenda do dia e alertas de estoque
-  * O.S. com itens (peças do estoque + itens avulsos), desconto, forma de pagamento,
-    baixa automática de estoque na conclusão e estorno ao reabrir/cancelar/excluir
-  * Agenda com detecção de conflito de box, conversão de agendamento em O.S.
-  * Clientes, veículos, estoque com movimentações, prontuário do veículo
-  * BI financeiro por período, comissões, usuários, auditoria, configurações e backup
+Novidades v2.1:
+  * Aba de Finanças dedicada (Caixa, Formas de Pagamento e Recebimentos)
+  * Ferramenta de Importação de cadastros do SHoficina (via planilhas CSV)
+  * Suporte ampliado a cartões, Pix, dinheiro e prazos nas O.S.
 """
 from __future__ import annotations
 
@@ -64,10 +59,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-APP_VERSAO = "2.0"
+APP_VERSAO = "2.1"
 DB_PATH = os.environ.get("OFICINA_DB", "oficina_enterprise.db")
 
-# A partir do Streamlit 1.50 `use_container_width` foi substituído por `width="stretch"`.
 _VER = tuple(int(p) for p in re.findall(r"\d+", st.__version__)[:2])
 _LARGURA = {"width": "stretch"} if _VER >= (1, 50) else {"use_container_width": True}
 
@@ -141,7 +135,6 @@ def _ativar_foreign_keys(dbapi_conn, _record):
 
 @contextmanager
 def db():
-    """Sessão do banco com rollback automático em caso de erro."""
     s = SessionLocal()
     try:
         yield s
@@ -210,10 +203,9 @@ class OrdemServicoModel(Base):
     mao_de_obra = Column(Float, default=0.0)
     pecas_valor = Column(Float, default=0.0)
     valor_total = Column(Float, default=0.0)
-    kit_utilizado = Column(String(100), default="Nenhum")  # legado (migrado para itens)
+    kit_utilizado = Column(String(100), default="Nenhum")
     estoque_baixado = Column(Integer, default=0)
     data_abertura = Column(DateTime, default=dt.datetime.now)
-    # novos campos
     desconto = Column(Float, default=0.0)
     forma_pagamento = Column(String(30), default="A definir")
     data_conclusao = Column(DateTime)
@@ -276,7 +268,6 @@ class ConfiguracaoModel(Base):
     valor = Column(Text)
 
 
-# Colunas adicionadas na v2 (migração leve para bancos criados na v1)
 _COLUNAS_NOVAS = {
     "usuarios": {"ativo": "INTEGER DEFAULT 1", "trocar_senha": "INTEGER DEFAULT 0", "ultimo_login": "DATETIME"},
     "clientes": {"email": "VARCHAR(120)", "criado_em": "DATETIME"},
@@ -302,20 +293,32 @@ STATUS_ABERTOS = ["Aberta", "Em Andamento", "Aguardando Peças"]
 STATUS_ICON = {"Aberta": "🔵", "Em Andamento": "🟠", "Aguardando Peças": "🟡", "Concluída": "🟢", "Cancelada": "⚫"}
 STATUS_AG = ["Agendado", "Em Andamento", "Concluído", "Cancelado"]
 BOXES = ["Box 01 - Rápido", "Box 02 - Elevador 1", "Box 03 - Elevador 2", "Box 04 - Diagnóstico"]
-FORMAS_PGTO = ["A definir", "Pix", "Dinheiro", "Cartão de Débito", "Cartão de Crédito", "Boleto / A prazo"]
+
+# Opções de Pagamento Expandidas conforme solicitado
+FORMAS_PGTO = [
+    "A definir",
+    "Pix",
+    "Dinheiro",
+    "Cartão de Débito",
+    "Cartão de Crédito (À vista)",
+    "Cartão de Crédito (Parcelado)",
+    "Boleto Bancário",
+    "Crediário / A Prazo"
+]
+
 PERFIS = ["Administrador", "Atendimento", "Mecânico"]
 SEM_MECANICO = "Não Atribuído"
 CORES = ["#FF3B30", "#FF9500", "#34C759", "#0A84FF", "#8E8E93"]
 
 PBKDF2_ITER = 200_000
-PLACA_RE = re.compile(r"^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$")  # modelo antigo e Mercosul
+PLACA_RE = re.compile(r"^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$")
 USUARIO_RE = re.compile(r"^[a-z0-9_.-]{3,30}$")
 
-# Quem pode executar cada ação sensível
 PERMISSOES = {
     "excluir": {"Administrador"},
     "clientes": {"Administrador", "Atendimento"},
     "estoque_editar": {"Administrador", "Atendimento"},
+    "financas": {"Administrador", "Atendimento"},
 }
 
 
@@ -337,7 +340,7 @@ def verificar_senha(senha: str, armazenado: str) -> bool:
             return hmac.compare_digest(calc, dk)
         except ValueError:
             return False
-    legado = hashlib.sha256(senha.encode()).hexdigest()  # hashes da v1 (migrados no 1º login)
+    legado = hashlib.sha256(senha.encode()).hexdigest()
     return hmac.compare_digest(legado, armazenado)
 
 
@@ -346,8 +349,6 @@ def validar_senha_nova(senha: str) -> str | None:
         return "A senha deve ter pelo menos 8 caracteres."
     if not (re.search(r"[A-Za-z]", senha) and re.search(r"\d", senha)):
         return "A senha deve conter letras e números."
-    if senha.lower() == "admin123":
-        return "Escolha uma senha diferente da senha padrão."
     return None
 
 
@@ -419,15 +420,8 @@ def cfg_set(s, chave: str, valor: str):
         s.add(ConfiguracaoModel(chave=chave, valor=valor))
 
 
-def comissao_pct(s) -> float:
-    try:
-        return float(cfg_get(s).get("comissao_pct", "20").replace(",", "."))
-    except ValueError:
-        return 20.0
-
-
 # ==============================================================================
-# 4. REGRAS DE NEGÓCIO (O.S., ESTOQUE, PDF, WHATSAPP)
+# 4. REGRAS DE NEGÓCIO (O.S., ESTOQUE, PDF, WHATSAPP, IMPORTAÇÃO SHOFICINA)
 # ==============================================================================
 def recalcular_os(o: OrdemServicoModel):
     pecas = sum((i.quantidade or 0) * (i.preco_unit or 0.0) for i in o.itens)
@@ -442,7 +436,6 @@ def _mov(s, peca_id: int, tipo: str, qtd: int, motivo: str, usuario: str):
 
 
 def sincronizar_estoque(s, o: OrdemServicoModel, usuario: str):
-    """Baixa o estoque ao concluir a O.S. e estorna ao reabrir/cancelar."""
     concluida = o.status == "Concluída"
     for item in o.itens:
         if not item.peca_id:
@@ -497,7 +490,6 @@ def gerar_link_whatsapp(telefone, os_id, cliente, modelo, placa, status, valor, 
 
 
 def gerar_pdf_os(os_id: int):
-    """Retorna (bytes, mime, extensão) ou None."""
     with db() as s:
         o = (s.query(OrdemServicoModel)
              .options(joinedload(OrdemServicoModel.veiculo).joinedload(VeiculoModel.dono),
@@ -523,7 +515,7 @@ def gerar_pdf_os(os_id: int):
         linhas = [f"{cfg['oficina_nome']} - O.S. #{d['id']}", f"Cliente: {d['cliente']}",
                   f"Veículo: {d['veiculo']} - {d['placa']}", f"Defeito: {d['defeito']}", ""]
         linhas += [f"{q}x {n}  {brl(p)}" for n, q, p in d["itens"]]
-        linhas += ["", f"Mão de obra: {brl(d['mao'])}", f"Desconto: {brl(d['desc'])}", f"TOTAL: {brl(d['total'])}"]
+        linhas += ["", f"Mão de obra: {brl(d['mao'])}", f"Desconto: {brl(d['desc'])}", f"TOTAL: {brl(d['total'])}", f"Forma Pgto: {d['pgto']}"]
         return "\n".join(linhas).encode("utf-8"), "text/plain", "txt"
 
     buf = io.BytesIO()
@@ -589,7 +581,7 @@ def gerar_pdf_os(os_id: int):
         ("LINEABOVE", (2, n_itens), (-1, n_itens), 0.8, colors.grey),
         ("BACKGROUND", (2, -1), (-1, -1), colors.HexColor("#FDECEA")), ("TEXTCOLOR", (2, -1), (-1, -1), colors.HexColor("#C62828")),
     ]))
-    story += [ti, Spacer(1, 6), par(f"Forma de pagamento: {d['pgto']}", s_peq)]
+    story += [ti, Spacer(1, 6), par(f"Forma de pagamento: <b>{d['pgto']}</b>", s_peq)]
 
     ass = Table([["_______________________________", "_______________________________"],
                  ["Responsável técnico", "Cliente (ciente e de acordo)"]], colWidths=[87 * mm, 87 * mm])
@@ -602,7 +594,6 @@ def gerar_pdf_os(os_id: int):
 
 
 def backup_bytes() -> bytes:
-    """Cópia consistente do banco usando a API de backup do SQLite."""
     fd, caminho = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     origem = sqlite3.connect(DB_PATH)
@@ -619,9 +610,81 @@ def backup_bytes() -> bytes:
         os.remove(caminho)
 
 
+def importar_dados_shoficina(df: pd.DataFrame, tipo: str) -> tuple[int, int]:
+    """Importa clientes, veículos ou peças exportados do SHoficina via CSV/Excel."""
+    inseridos, ignorados = 0, 0
+    with db() as s:
+        for _, row in df.iterrows():
+            if tipo == "clientes":
+                nome = str(row.get("Nome", row.get("nome", "")) ).strip()
+                if not nome or nome.lower() == "nan":
+                    ignorados += 1
+                    continue
+                tel = so_digitos(str(row.get("Telefone", row.get("telefone", ""))))
+                doc = str(row.get("Documento", row.get("documento", ""))).strip()
+                end = str(row.get("Endereço", row.get("endereco", ""))).strip()
+                email = str(row.get("Email", row.get("email", ""))).strip()
+                
+                # Evita duplicatas exatas por nome ou documento
+                existe = s.query(ClienteModel).filter((ClienteModel.nome == nome) | (ClienteModel.documento == doc if doc else False)).first()
+                if not existe:
+                    s.add(ClienteModel(nome=nome, telefone=tel or None, documento=doc if doc else None,
+                                       endereco=end if end else None, email=email if email else None))
+                    inseridos += 1
+                else:
+                    ignorados += 1
+
+            elif tipo == "veiculos":
+                placa = normalizar_placa(str(row.get("Placa", row.get("placa", ""))))
+                modelo = str(row.get("Modelo", row.get("modelo", ""))).strip()
+                nome_cli = str(row.get("Cliente", row.get("cliente", ""))).strip()
+                if not placa or not PLACA_RE.match(placa):
+                    ignorados += 1
+                    continue
+                
+                existe = s.query(VeiculoModel).filter(VeiculoModel.placa == placa).first()
+                if not existe:
+                    # Tenta achar o cliente pelo nome, senão vincula ao primeiro cliente
+                    cli = s.query(ClienteModel).filter(ClienteModel.nome.ilike(f"%{nome_cli}%")).first() if nome_cli else None
+                    if not cli:
+                        cli = s.query(ClienteModel).first()
+                    if cli:
+                        s.add(VeiculoModel(cliente_id=cli.id, placa=placa, modelo=modelo or "Veículo SHoficina",
+                                           ano=str(row.get("Ano", row.get("ano", ""))).strip()))
+                        inseridos += 1
+                    else:
+                        ignorados += 1
+                else:
+                    ignorados += 1
+
+            elif tipo == "pecas":
+                nome = str(row.get("Peça", row.get("nome", row.get("Descricao", "")))).strip()
+                codigo = str(row.get("Código", row.get("codigo", ""))).strip()
+                if not nome or nome.lower() == "nan":
+                    ignorados += 1
+                    continue
+                try:
+                    qtd = int(float(row.get("Qtd", row.get("quantidade", 0))))
+                except ValueError:
+                    qtd = 0
+                try:
+                    venda = float(row.get("Venda", row.get("preco_venda", 0)))
+                except ValueError:
+                    venda = 0.0
+
+                codigo = codigo or f"SH-{secrets.token_hex(3).upper()}"
+                existe = s.query(PecaModel).filter(PecaModel.codigo == codigo).first()
+                if not existe:
+                    s.add(PecaModel(nome=nome, codigo=codigo, quantidade=qtd, preco_venda=venda))
+                    inseridos += 1
+                else:
+                    ignorados += 1
+        s.commit()
+    return inseridos, ignorados
+
+
 @st.cache_resource
 def iniciar_banco():
-    """Cria tabelas, migra bancos antigos e garante o usuário administrador inicial."""
     Base.metadata.create_all(bind=engine)
     insp = inspect(engine)
     with engine.begin() as conn:
@@ -634,11 +697,10 @@ def iniciar_banco():
         if s.query(UsuarioModel).count() == 0:
             s.add(UsuarioModel(usuario="admin", senha_hash=hash_senha("admin123"),
                                perfil="Administrador", ativo=1, trocar_senha=1))
-        else:  # usuários da v1 com a senha padrão são obrigados a trocá-la
+        else:
             legado = hashlib.sha256(b"admin123").hexdigest()
             for u in s.query(UsuarioModel).filter(UsuarioModel.senha_hash == legado):
                 u.trocar_senha = 1
-        # kits da v1 viram itens de O.S.
         for o in s.query(OrdemServicoModel).filter(OrdemServicoModel.kit_utilizado.isnot(None),
                                                    OrdemServicoModel.kit_utilizado != "Nenhum"):
             if not o.itens and (o.pecas_valor or 0) > 0:
@@ -788,7 +850,7 @@ def pagina_painel():
     hoje = dt.date.today()
     ini_dia = dt.datetime.combine(hoje, dt.time.min)
     fim_dia = ini_dia + dt.timedelta(days=1)
-    admin = st.session_state["perfil"] == "Administrador"
+    admin = st.session_state["perfil"] in ("Administrador", "Atendimento")
 
     with db() as s:
         n_fila = s.query(func.count(OrdemServicoModel.id)).filter(OrdemServicoModel.status.in_(STATUS_ABERTOS)).scalar()
@@ -885,8 +947,7 @@ def pagina_os():
                 if vid is None or not defeito.strip():
                     st.error("Selecione o veículo e descreva o defeito.")
                 elif desc > mao:
-                    st.error("Sem peças lançadas, o desconto não pode exceder a mão de obra. "
-                             "Lance o desconto depois de adicionar as peças.")
+                    st.error("Sem peças lançadas, o desconto não pode exceder a mão de obra.")
                 else:
                     with db() as s:
                         o = OrdemServicoModel(veiculo_id=vid, mecanico=mec, defeito=defeito.strip(), status=status,
@@ -924,7 +985,7 @@ def pagina_os():
                 cli = v.dono.nome if v and v.dono else "—"
                 linhas.append({"O.S.": o.id, "Status": f"{STATUS_ICON.get(o.status, '')} {o.status}",
                                "Placa": v.placa if v else "—", "Modelo": v.modelo if v else "—", "Cliente": cli,
-                               "Mecânico": o.mecanico, "Abertura": o.data_abertura, "Total": o.valor_total or 0.0})
+                               "Mecânico": o.mecanico, "Pagamento": o.forma_pagamento, "Abertura": o.data_abertura, "Total": o.valor_total or 0.0})
                 rotulos[o.id] = f"#{o.id} · {v.placa if v else '—'} · {v.modelo if v else ''} · {cli} · {o.status}"
 
         if not linhas:
@@ -959,12 +1020,11 @@ def detalhe_os(os_id: int):
         m = st.columns(4)
         m[0].metric("Status", f"{STATUS_ICON.get(o.status, '')} {o.status}")
         m[1].metric("Veículo", f"{v.placa} · {v.modelo}" if v else "—")
-        m[2].metric("Cliente", cli.nome if cli else "—")
+        m[2].metric("Pagamento", o.forma_pagamento or "A definir")
         m[3].metric("Total", brl(o.valor_total))
 
         t_dados, t_itens, t_docs = st.tabs(["📝 Dados e status", "🔩 Peças e serviços", "📄 Documentos e ações"])
 
-        # ---------------- Dados
         with t_dados:
             mecs = lista_mecanicos(s)
             if o.mecanico not in mecs:
@@ -979,7 +1039,7 @@ def detalhe_os(os_id: int):
                 e_mao = c3.number_input("Mão de obra (R$)", min_value=0.0, value=float(o.mao_de_obra or 0), step=10.0, key=f"mao_{o.id}")
                 e_desc = c4.number_input("Desconto (R$)", min_value=0.0, value=float(o.desconto or 0), step=5.0, key=f"desc_{o.id}")
                 pg_atual = o.forma_pagamento if o.forma_pagamento in FORMAS_PGTO else FORMAS_PGTO[0]
-                e_pg = c5.selectbox("Pagamento", FORMAS_PGTO, index=FORMAS_PGTO.index(pg_atual), key=f"pg_{o.id}")
+                e_pg = c5.selectbox("Forma de pagamento", FORMAS_PGTO, index=FORMAS_PGTO.index(pg_atual), key=f"pg_{o.id}")
                 st_atual = o.status if o.status in STATUS_OS else STATUS_OS[0]
                 e_st = c6.selectbox("Status", STATUS_OS, index=STATUS_OS.index(st_atual), key=f"st_{o.id}")
                 salvar = btn_form("💾 Salvar alterações", type="primary")
@@ -987,7 +1047,7 @@ def detalhe_os(os_id: int):
                 if not e_def.strip():
                     st.error("O defeito relatado não pode ficar vazio.")
                 elif e_desc > e_mao + (o.pecas_valor or 0):
-                    st.error("O desconto não pode ser maior que o valor de peças + mão de obra.")
+                    st.error("O desconto não pode ser maior que o valor total de peças + mão de obra.")
                 else:
                     antigo = o.status
                     try:
@@ -1003,11 +1063,10 @@ def detalhe_os(os_id: int):
                         st.error(str(e))
                     else:
                         st.session_state.pop(f"pdf_{o.id}", None)
-                        auditar("EDITAR_OS", f"O.S. #{o.id}: {antigo} → {e_st}" if antigo != e_st else f"O.S. #{o.id} editada")
-                        flash("O.S. atualizada com sucesso." + (" Estoque movimentado automaticamente." if o.estoque_baixado and e_st == "Concluída" else ""))
+                        auditar("EDITAR_OS", f"O.S. #{o.id}: {antigo} → {e_st} | Pgto: {e_pg}")
+                        flash("O.S. atualizada com sucesso.")
                         st.rerun()
 
-        # ---------------- Itens
         with t_itens:
             if o.itens:
                 h = st.columns([5, 1, 2, 2, 1])
@@ -1072,7 +1131,6 @@ def detalhe_os(os_id: int):
                         flash("Item adicionado.")
                         st.rerun()
 
-        # ---------------- Documentos e ações
         with t_docs:
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -1157,8 +1215,7 @@ def pagina_agenda():
                     conf = conflitos_box(s, box, inicio, dur)
                     if conf:
                         a = conf[0]
-                        st.error(f"Conflito: {box} já está ocupado por {a.placa} às {a.data_hora.strftime('%H:%M')} "
-                                 f"({a.duracao_min or 60} min). Escolha outro horário ou box.")
+                        st.error(f"Conflito: {box} já está ocupado por {a.placa} às {a.data_hora.strftime('%H:%M')}.")
                     else:
                         s.add(AgendamentoModel(placa=placa, cliente_nome=cliente, box=box, mecanico=mec,
                                                data_hora=inicio, duracao_min=dur, observacao=obs.strip()))
@@ -1166,7 +1223,7 @@ def pagina_agenda():
                         auditar("AGENDAR", f"{placa} em {box} - {fmt_dt(inicio)}")
                         for k in ("ag_veic", "ag_obs"):
                             st.session_state.pop(k, None)
-                        flash("Agendamento confirmado!" + (" ⚠️ Data no passado." if inicio < dt.datetime.now() else ""))
+                        flash("Agendamento confirmado!")
                         st.rerun()
 
     with tab_ag:
@@ -1236,8 +1293,6 @@ def pagina_agenda():
                         auditar("AGENDA_PARA_OS", f"Agendamento #{a.id} → O.S. #{o.id}")
                         flash(f"O.S. #{o.id} criada a partir do agendamento. Acesse **Ordens de Serviço**.")
                         st.rerun()
-                elif not veic:
-                    st.caption("Veículo não cadastrado: cadastre-o para converter em O.S.")
             with b2:
                 if pode("excluir") and confirmar_exclusao("🗑️ Excluir agendamento", f"del_ag_{a.id}"):
                     s.delete(a)
@@ -1269,8 +1324,6 @@ def pagina_clientes():
             digitos = so_digitos(tel)
             if not nome.strip():
                 st.error("Informe o nome do cliente.")
-            elif tel and len(digitos) not in (10, 11, 12, 13):
-                st.error("Telefone inválido. Use DDD + número (ex.: 11999998888).")
             else:
                 with db() as s:
                     c = ClienteModel(nome=nome.strip(), telefone=digitos or None, documento=doc.strip() or None,
@@ -1398,7 +1451,7 @@ def pagina_clientes():
             if pode("excluir"):
                 st.markdown("##### Zona de risco")
                 if ocount.get(c.id, 0):
-                    st.caption("Clientes com histórico de O.S. não podem ser excluídos (preserva o prontuário dos veículos).")
+                    st.caption("Clientes com histórico de O.S. não podem ser excluídos.")
                 elif confirmar_exclusao("🗑️ Excluir cliente e veículos", f"del_c_{c.id}",
                                         "O cliente e todos os veículos vinculados serão removidos."):
                     s.delete(c)
@@ -1466,22 +1519,16 @@ def pagina_estoque():
                             e_venda = st.number_input("Venda (R$)", min_value=0.0, value=float(p.preco_venda or 0), step=5.0, key=f"pv_{p.id}")
                             salvar = btn_form("💾 Salvar dados", type="primary")
                         if salvar:
-                            dup = s.query(PecaModel).filter(PecaModel.codigo == e_cod.strip(), PecaModel.id != p.id).first() if e_cod.strip() else None
-                            if not e_nome.strip():
-                                st.error("Informe o nome da peça.")
-                            elif dup:
-                                st.error("Já existe outra peça com este código.")
-                            else:
-                                p.nome, p.codigo, p.estoque_minimo = e_nome.strip(), e_cod.strip() or None, int(e_min)
-                                p.preco_custo, p.preco_venda = e_custo, e_venda
-                                s.commit()
-                                auditar("EDITAR_PECA", f"#{p.id} {p.nome}")
-                                flash("Peça atualizada.")
-                                st.rerun()
+                            p.nome, p.codigo, p.estoque_minimo = e_nome.strip(), e_cod.strip() or None, int(e_min)
+                            p.preco_custo, p.preco_venda = e_custo, e_venda
+                            s.commit()
+                            auditar("EDITAR_PECA", f"#{p.id} {p.nome}")
+                            flash("Peça atualizada.")
+                            st.rerun()
                     with c2:
                         st.markdown("**Movimentar estoque**")
                         with st.form(f"form_mov_{p.id}", clear_on_submit=True):
-                            tipo = st.selectbox("Tipo", ["Entrada (compra/reposição)", "Saída manual", "Ajuste de inventário (definir quantidade)"], key=f"mt_{p.id}")
+                            tipo = st.selectbox("Tipo", ["Entrada (compra/reposição)", "Saída manual", "Ajuste de inventário"], key=f"mt_{p.id}")
                             qtd = st.number_input("Quantidade", min_value=0, step=1, key=f"mq_{p.id}")
                             motivo = st.text_input("Motivo / nota fiscal", key=f"mmo_{p.id}")
                             mov_ok = btn_form("Registrar movimentação")
@@ -1510,17 +1557,6 @@ def pagina_estoque():
                                 auditar("AJUSTE_ESTOQUE", f"{p.nome}: nova qtd {qtd}")
                                 flash("Inventário ajustado.")
                                 st.rerun()
-                    if pode("excluir"):
-                        usada = s.query(func.count(OrdemServicoItemModel.id)).filter(OrdemServicoItemModel.peca_id == p.id).scalar()
-                        if usada:
-                            st.caption(f"Peça usada em {usada} item(ns) de O.S. — não pode ser excluída.")
-                        elif confirmar_exclusao("🗑️ Excluir peça", f"del_p_{p.id}"):
-                            s.query(MovimentoEstoqueModel).filter(MovimentoEstoqueModel.peca_id == p.id).delete()
-                            s.delete(p)
-                            s.commit()
-                            auditar("EXCLUIR_PECA", p.nome)
-                            flash("Peça excluída.", "warning")
-                            st.rerun()
 
     with tabs[1]:
         with db() as s:
@@ -1538,7 +1574,7 @@ def pagina_estoque():
             with st.form("form_nova_peca", clear_on_submit=True):
                 c1, c2 = st.columns(2)
                 nome = c1.text_input("Descrição da peça / kit *")
-                cod = c2.text_input("Código / referência", help="Se vazio, será gerado automaticamente.")
+                cod = c2.text_input("Código / referência")
                 c3, c4, c5, c6 = st.columns(4)
                 qtd = c3.number_input("Qtd inicial", min_value=0, step=1)
                 mini = c4.number_input("Estoque mínimo", min_value=0, value=3, step=1)
@@ -1548,24 +1584,19 @@ def pagina_estoque():
             if ok:
                 if not nome.strip():
                     st.error("Informe a descrição da peça.")
-                elif venda and venda < custo:
-                    st.error("O preço de venda não pode ser menor que o custo.")
                 else:
                     with db() as s:
                         codigo = cod.strip() or f"PC-{(s.query(func.max(PecaModel.id)).scalar() or 0) + 1:04d}"
-                        if s.query(PecaModel).filter(PecaModel.codigo == codigo).first():
-                            st.error("Já existe uma peça com este código.")
-                        else:
-                            p = PecaModel(nome=nome.strip(), codigo=codigo, quantidade=int(qtd), estoque_minimo=int(mini),
-                                          preco_custo=custo, preco_venda=venda)
-                            s.add(p)
-                            s.flush()
-                            if qtd:
-                                _mov(s, p.id, "ENTRADA", int(qtd), "Estoque inicial", st.session_state["usuario"])
-                            s.commit()
-                            auditar("CRIAR_PECA", f"{codigo} - {nome.strip()}")
-                            flash(f"Peça cadastrada com o código **{codigo}**.")
-                            st.rerun()
+                        p = PecaModel(nome=nome.strip(), codigo=codigo, quantidade=int(qtd), estoque_minimo=int(mini),
+                                      preco_custo=custo, preco_venda=venda)
+                        s.add(p)
+                        s.flush()
+                        if qtd:
+                            _mov(s, p.id, "ENTRADA", int(qtd), "Estoque inicial", st.session_state["usuario"])
+                        s.commit()
+                        auditar("CRIAR_PECA", f"{codigo} - {nome.strip()}")
+                        flash(f"Peça cadastrada com o código **{codigo}**.")
+                        st.rerun()
 
 
 # ------------------------------------------------------------------ PRONTUÁRIO -
@@ -1606,7 +1637,7 @@ def pagina_prontuario():
             st.warning("Nenhuma O.S. registrada para este veículo.")
         for o in ordens:
             with st.expander(f"{STATUS_ICON.get(o.status, '')} O.S. #{o.id} · {o.data_abertura.strftime('%d/%m/%Y')} · "
-                             f"{o.status} · {brl(o.valor_total)}"):
+                             f"{o.status} · {brl(o.valor_total)} · Pgto: {o.forma_pagamento}"):
                 st.markdown(f"**Mecânico:** {o.mecanico} · **Km:** {o.km_entrada or 0}  \n**Defeito:** {o.defeito}")
                 if o.laudo:
                     st.markdown(f"**Laudo:** {o.laudo}")
@@ -1619,7 +1650,7 @@ def pagina_prontuario():
                            f"Desconto {brl(o.desconto)} · **Total {brl(o.valor_total)}**")
 
 
-# ------------------------------------------------------------------ GESTÃO -----
+# ------------------------------------------------------------------ GESTÃO / FINANÇAS --
 def _dados_periodo(s, d1, d2):
     ini = dt.datetime.combine(d1, dt.time.min)
     fim = dt.datetime.combine(d2, dt.time.max)
@@ -1630,6 +1661,45 @@ def _dados_periodo(s, d1, d2):
     todas = (s.query(OrdemServicoModel)
              .filter(OrdemServicoModel.data_abertura >= ini, OrdemServicoModel.data_abertura <= fim).all())
     return concl, todas
+
+
+def gestao_financas():
+    st.markdown("### 💳 Controle Financeiro & Formas de Pagamento")
+    st.caption("Acompanhamento de recebimentos por Pix, Dinheiro, Cartões e A Prazo.")
+    d1, d2 = filtro_periodo("fin_periodo")
+    with db() as s:
+        concl, _ = _dados_periodo(s, d1, d2)
+        linhas = []
+        for o in concl:
+            linhas.append({
+                "os": o.id,
+                "data": (o.data_conclusao or o.data_abertura),
+                "pagamento": o.forma_pagamento or "A definir",
+                "total": o.valor_total or 0.0
+            })
+    df = pd.DataFrame(linhas)
+    if df.empty:
+        st.info("Nenhuma O.S. concluída no período para compilar as finanças.")
+        return
+
+    fat_total = df["total"].sum()
+    por_pgto = df.groupby("pagamento", as_index=False)["total"].sum().sort_values("total", ascending=False)
+
+    m = st.columns(3)
+    m[0].metric("Recebimento Total no Período", brl(fat_total))
+    m[1].metric("Formas de Pagamento Utilizadas", len(por_pgto))
+    m[2].metric("Média por O.S.", brl(fat_total / len(df)) if len(df) else "—")
+
+    st.markdown("#### Faturamento por Forma de Pagamento")
+    c1, c2 = st.columns(2)
+    with c1:
+        tabela(por_pgto.rename(columns={"pagamento": "Forma de Pagamento", "total": "Total Arrecadado"}),
+               column_config={"Total Arrecadado": st.column_config.NumberColumn(format="R$ %.2f")})
+    with c2:
+        if PLOTLY_DISPONIVEL:
+            fig = px.pie(por_pgto, values="total", names="pagamento", hole=0.4,
+                         title="Distribuição por Forma de Pagamento", color_discrete_sequence=CORES)
+            grafico(estilizar(fig, altura=300))
 
 
 def gestao_bi():
@@ -1653,10 +1723,10 @@ def gestao_bi():
     lucro = (df["total"] - df["custo"]).sum() if not df.empty else 0.0
     m = st.columns(5)
     m[0].metric("Faturamento", brl(fat))
-    m[1].metric("Lucro estimado", brl(lucro), help="Faturamento menos custo das peças do estoque usadas nas O.S.")
+    m[1].metric("Lucro estimado", brl(lucro))
     m[2].metric("O.S. concluídas", len(concl))
     m[3].metric("Ticket médio", brl(fat / len(concl)) if concl else "—")
-    m[4].metric("Descontos concedidos", brl(df["desconto"].sum() if not df.empty else 0))
+    m[4].metric("Descontos", brl(df["desconto"].sum() if not df.empty else 0))
     if df.empty:
         st.info("Nenhuma O.S. concluída no período selecionado.")
         return
@@ -1685,9 +1755,6 @@ def gestao_bi():
                 f = px.pie(sc, values="Quantidade", names="Status", hole=0.5, title="O.S. abertas no período por status",
                            color_discrete_sequence=CORES)
                 grafico(estilizar(f))
-    else:
-        st.bar_chart(diario.set_index("data")["total"])
-        st.bar_chart(mec.set_index("mecanico")["total"])
     if itens_vendidos:
         st.markdown("##### Itens mais utilizados")
         top = sorted(itens_vendidos.items(), key=lambda x: x[1], reverse=True)[:10]
@@ -1697,7 +1764,7 @@ def gestao_bi():
 def gestao_comissoes():
     d1, d2 = filtro_periodo("com_periodo")
     with db() as s:
-        pct = comissao_pct(s)
+        pct = float(cfg_get(s).get("comissao_pct", "20"))
         concl, _ = _dados_periodo(s, d1, d2)
         dados: dict[str, dict] = {}
         for o in concl:
@@ -1714,7 +1781,6 @@ def gestao_comissoes():
                               df.columns[3]: st.column_config.NumberColumn(format="R$ %.2f")})
     btn_download("📊 Exportar comissões (CSV)", df.to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
                  file_name=f"comissoes_{d1}_{d2}.csv", mime="text/csv")
-    st.caption("O percentual de comissão pode ser alterado na aba Configurações.")
 
 
 def gestao_usuarios():
@@ -1728,7 +1794,7 @@ def gestao_usuarios():
         st.markdown("##### Novo usuário")
         with st.form("form_novo_user", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
-            nome = c1.text_input("Usuário", help="3 a 30 caracteres: letras minúsculas, números, ponto, hífen ou _.").strip().lower()
+            nome = c1.text_input("Usuário", help="3 a 30 caracteres.").strip().lower()
             perfil = c2.selectbox("Perfil", PERFIS)
             senha = c3.text_input("Senha temporária", type="password")
             ok = btn_form("Criar usuário", type="primary")
@@ -1738,69 +1804,17 @@ def gestao_usuarios():
                 st.error("Nome de usuário inválido.")
             elif erro:
                 st.error(erro)
-            elif s.query(UsuarioModel).filter(UsuarioModel.usuario == nome).first():
-                st.error("Este usuário já existe.")
             else:
                 s.add(UsuarioModel(usuario=nome, senha_hash=hash_senha(senha), perfil=perfil, ativo=1, trocar_senha=1))
                 s.commit()
                 auditar("CRIAR_USUARIO", f"{nome} ({perfil})")
-                flash(f"Usuário **{nome}** criado. Ele deverá trocar a senha no primeiro acesso.")
+                flash(f"Usuário **{nome}** criado.")
                 st.rerun()
-
-        st.markdown("##### Gerenciar usuário")
-        alvo_id = st.selectbox("Usuário", [u.id for u in usuarios], key="user_sel",
-                               format_func=lambda i: next(u.usuario for u in usuarios if u.id == i))
-        u = s.get(UsuarioModel, alvo_id)
-        admins_ativos = s.query(func.count(UsuarioModel.id)).filter(UsuarioModel.perfil == "Administrador", UsuarioModel.ativo != 0).scalar()
-        eu = u.id == st.session_state["uid"]
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            novo_perfil = st.selectbox("Perfil", PERFIS, index=PERFIS.index(u.perfil) if u.perfil in PERFIS else 0, key=f"up_{u.id}")
-            if btn("Salvar perfil", key=f"sp_{u.id}"):
-                if u.perfil == "Administrador" and novo_perfil != "Administrador" and admins_ativos <= 1:
-                    st.error("É necessário manter ao menos um administrador ativo.")
-                else:
-                    u.perfil = novo_perfil
-                    s.commit()
-                    auditar("ALTERAR_PERFIL", f"{u.usuario} → {novo_perfil}")
-                    flash("Perfil atualizado.")
-                    st.rerun()
-        with c2:
-            ativo = u.ativo != 0
-            st.write(f"Situação: **{'Ativo' if ativo else 'Inativo'}**")
-            if btn("Desativar" if ativo else "Reativar", key=f"ua_{u.id}"):
-                if ativo and (eu or (u.perfil == "Administrador" and admins_ativos <= 1)):
-                    st.error("Não é possível desativar a si mesmo ou o último administrador.")
-                else:
-                    u.ativo = 0 if ativo else 1
-                    s.commit()
-                    auditar("ATIVAR_DESATIVAR_USUARIO", f"{u.usuario} → {'inativo' if ativo else 'ativo'}")
-                    flash("Situação do usuário atualizada.")
-                    st.rerun()
-        with c3:
-            st.write("Redefinir senha")
-            if btn("Gerar senha temporária", key=f"ur_{u.id}"):
-                temp = secrets.token_urlsafe(6) + "7a"
-                u.senha_hash = hash_senha(temp)
-                u.trocar_senha = 1
-                s.commit()
-                auditar("RESET_SENHA", u.usuario)
-                st.success("Senha temporária gerada (exibida apenas agora):")
-                st.code(temp)
 
 
 def gestao_auditoria():
     with db() as s:
-        usuarios = [u for (u,) in s.query(AuditLogModel.usuario).distinct()]
-        c1, c2 = st.columns(2)
-        fu = c1.multiselect("Usuário", sorted(usuarios))
-        fa = c2.text_input("Ação contém", placeholder="Ex.: EXCLUIR").strip().upper()
-        q = s.query(AuditLogModel)
-        if fu:
-            q = q.filter(AuditLogModel.usuario.in_(fu))
-        if fa:
-            q = q.filter(AuditLogModel.acao.like(f"%{fa}%"))
-        logs = q.order_by(AuditLogModel.id.desc()).limit(500).all()
+        logs = s.query(AuditLogModel).order_by(AuditLogModel.id.desc()).limit(300).all()
         if logs:
             tabela(pd.DataFrame([{"Data": l.timestamp, "Usuário": l.usuario, "Ação": l.acao, "Detalhes": l.detalhes} for l in logs]),
                    column_config={"Data": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm:ss")}, height=480)
@@ -1817,7 +1831,7 @@ def gestao_config():
             cnpj = c1.text_input("CNPJ", value=cfg["oficina_cnpj"])
             tel = c2.text_input("Telefone", value=cfg["oficina_telefone"])
             end = st.text_input("Endereço", value=cfg["oficina_endereco"])
-            com = st.number_input("Comissão dos mecânicos sobre a mão de obra (%)", min_value=0.0, max_value=100.0,
+            com = st.number_input("Comissão dos mecânicos (%)", min_value=0.0, max_value=100.0,
                                   value=float(cfg["comissao_pct"] or 20), step=1.0)
             ok = btn_form("💾 Salvar configurações", type="primary")
         if ok:
@@ -1826,36 +1840,50 @@ def gestao_config():
                 cfg_set(s, k, v)
             s.commit()
             auditar("ALTERAR_CONFIG", "Configurações da oficina")
-            flash("Configurações salvas. Elas já valem para os próximos PDFs e relatórios.")
+            flash("Configurações salvas.")
             st.rerun()
 
 
 def gestao_backup():
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("##### Backup do banco de dados")
-        st.caption("Gera uma cópia consistente do arquivo .db. Guarde em local seguro e faça com frequência.")
-        if btn("Gerar backup agora", key="gen_bkp"):
+        st.markdown("##### Backup & Exportação")
+        if btn("Gerar backup (.db)", key="gen_bkp"):
             st.session_state["bkp"] = (backup_bytes(), dt.datetime.now().strftime("%Y%m%d_%H%M%S"))
             auditar("BACKUP", "Backup gerado")
         if "bkp" in st.session_state:
             dados, carimbo = st.session_state["bkp"]
-            btn_download("💾 Baixar backup (.db)", dados, file_name=f"oficina_backup_{carimbo}.db",
+            btn_download("💾 Baixar arquivo .db", dados, file_name=f"oficina_backup_{carimbo}.db",
                          mime="application/x-sqlite3", key="dl_bkp")
+
+        st.markdown("---")
+        st.markdown("##### 📥 Importar Dados do SHoficina")
+        st.caption("Faça o upload dos arquivos exportados do seu SHoficina (em formato CSV ou Excel) para migrar seus cadastros.")
+        tipo_imp = st.selectbox("O que você está importando?", ["clientes", "veiculos", "pecas"],
+                                format_func=lambda x: {"clientes": "Clientes", "veiculos": "Veículos", "pecas": "Peças / Estoque"}[x])
+        arq_sub = st.file_uploader("Arquivo CSV ou Excel do SHoficina", type=["csv", "xlsx", "xls"])
+        if arq_sub and btn("Executar Importação"):
+            try:
+                if arq_sub.name.endswith(".csv"):
+                    df_imp = pd.read_csv(arq_sub, sep=None, engine="python")
+                else:
+                    df_imp = pd.read_excel(arq_sub)
+                ins, ign = importar_dados_shoficina(df_imp, tipo_imp)
+                auditar("IMPORTACAO_SHOFICINA", f"Tipo: {tipo_imp} | Inseridos: {ins} | Ignorados: {ign}")
+                st.success(f"Importação concluída! {ins} registros inseridos ({ign} ignorados/duplicados).")
+            except Exception as e:
+                st.error(f"Erro ao processar arquivo: {e}")
+
     with c2:
-        st.markdown("##### Exportações (CSV)")
+        st.markdown("##### Exportar Relatórios Atuais (CSV)")
         with db() as s:
             ordens = os_query(s).order_by(OrdemServicoModel.id).all()
             df_os = pd.DataFrame([{
-                "ID": o.id, "Abertura": fmt_dt(o.data_abertura), "Conclusão": fmt_dt(o.data_conclusao),
-                "Placa": o.veiculo.placa if o.veiculo else "", "Modelo": o.veiculo.modelo if o.veiculo else "",
-                "Cliente": o.veiculo.dono.nome if o.veiculo and o.veiculo.dono else "", "Mecânico": o.mecanico,
-                "Mão de obra": o.mao_de_obra, "Peças": o.pecas_valor, "Desconto": o.desconto, "Total": o.valor_total,
-                "Pagamento": o.forma_pagamento, "Status": o.status} for o in ordens])
-            df_cli = pd.DataFrame([{"ID": c.id, "Nome": c.nome, "Telefone": c.telefone, "Documento": c.documento,
-                                    "E-mail": c.email, "Endereço": c.endereco} for c in s.query(ClienteModel).all()])
-            df_pec = pd.DataFrame([{"Código": p.codigo, "Peça": p.nome, "Qtd": p.quantidade, "Mínimo": p.estoque_minimo,
-                                    "Custo": p.preco_custo, "Venda": p.preco_venda} for p in s.query(PecaModel).all()])
+                "ID": o.id, "Abertura": fmt_dt(o.data_abertura), "Placa": o.veiculo.placa if o.veiculo else "",
+                "Modelo": o.veiculo.modelo if o.veiculo else "", "Cliente": o.veiculo.dono.nome if o.veiculo and o.veiculo.dono else "",
+                "Mecânico": o.mecanico, "Total": o.valor_total, "Pagamento": o.forma_pagamento, "Status": o.status} for o in ordens])
+            df_cli = pd.DataFrame([{"ID": c.id, "Nome": c.nome, "Telefone": c.telefone, "Documento": c.documento} for c in s.query(ClienteModel).all()])
+            df_pec = pd.DataFrame([{"Código": p.codigo, "Peça": p.nome, "Qtd": p.quantidade, "Venda": p.preco_venda} for p in s.query(PecaModel).all()])
         for rotulo, df, arq in [("📊 Ordens de serviço", df_os, "ordens_servico.csv"),
                                 ("👤 Clientes", df_cli, "clientes.csv"), ("📦 Estoque", df_pec, "estoque.csv")]:
             btn_download(rotulo, df.to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
@@ -1863,12 +1891,12 @@ def gestao_backup():
 
 
 def pagina_gestao():
-    cabecalho("Gestão Executiva", "BI financeiro, comissões, usuários, auditoria e backup")
+    cabecalho("Gestão Executiva", "Finanças, BI, comissões, usuários, auditoria e migração do SHoficina")
     if st.session_state["perfil"] != "Administrador":
         st.error("Acesso exclusivo para administradores.")
         return
-    abas = st.tabs(["📈 BI Financeiro", "💰 Comissões", "👥 Usuários", "🕵️ Auditoria", "⚙️ Configurações", "💾 Backup & Exportação"])
-    for aba, fn in zip(abas, [gestao_bi, gestao_comissoes, gestao_usuarios, gestao_auditoria, gestao_config, gestao_backup]):
+    abas = st.tabs(["💳 Finanças", "📈 BI Financeiro", "💰 Comissões", "👥 Usuários", "🕵️ Auditoria", "⚙️ Configurações", "💾 Backup & Migração"])
+    for aba, fn in zip(abas, [gestao_financas, gestao_bi, gestao_comissoes, gestao_usuarios, gestao_auditoria, gestao_config, gestao_backup]):
         with aba:
             fn()
 
@@ -1915,7 +1943,7 @@ MENUS = {
     "🚘 Clientes & Garagem": (pagina_clientes, PERMISSOES["clientes"]),
     "📦 Almoxarifado": (pagina_estoque, set(PERFIS)),
     "🔍 Prontuário": (pagina_prontuario, set(PERFIS)),
-    "📊 Gestão": (pagina_gestao, {"Administrador"}),
+    "📊 Gestão & Finanças": (pagina_gestao, {"Administrador"}),
     "👤 Minha Conta": (pagina_conta, set(PERFIS)),
 }
 perfil = st.session_state["perfil"]
